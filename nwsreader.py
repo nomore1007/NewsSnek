@@ -304,18 +304,72 @@ class NewsReaderConfig:
         """
         self.settings_file = settings_file
         self._load_settings()
+        self._ensure_sources_file()
 
     def _load_settings(self):
         """Load settings from JSON file with defaults."""
+        # Create settings.json from example if it doesn't exist
+        if not os.path.exists(self.settings_file):
+            example_file = self.settings_file.replace('.json', '.example.json')
+            if os.path.exists(example_file):
+                # Copy example file to working file
+                import shutil
+                shutil.copy2(example_file, self.settings_file)
+                print(f"Created {self.settings_file} from {example_file}")
+            else:
+                # Create from defaults if no example exists
+                self.settings = self._get_defaults()
+                self._save_settings()
+                return
+
+        # Load existing settings file
         try:
             with open(self.settings_file, 'r') as f:
                 self.settings = json.load(f)
-        except FileNotFoundError:
+        except json.JSONDecodeError:
+            # If file exists but is invalid JSON, recreate from example
+            example_file = self.settings_file.replace('.json', '.example.json')
+            if os.path.exists(example_file):
+                import shutil
+                shutil.copy2(example_file, self.settings_file)
+                print(f"Recreated {self.settings_file} from {example_file} (invalid JSON)")
+                try:
+                    with open(self.settings_file, 'r') as f:
+                        self.settings = json.load(f)
+                except json.JSONDecodeError:
+                    # If example is also invalid, use defaults
+                    self.settings = self._get_defaults()
+                    self._save_settings()
+            else:
+                self.settings = self._get_defaults()
+                self._save_settings()
+        except Exception as e:
+            print(f"Warning: Error loading settings file: {e}")
+            # Use defaults as fallback
             self.settings = self._get_defaults()
             self._save_settings()
-        except json.JSONDecodeError:
-            print(f"Warning: Invalid settings file {self.settings_file}, using defaults")
-            self.settings = self._get_defaults()
+
+    def _ensure_sources_file(self):
+        """Ensure sources.txt exists, creating from example if needed."""
+        sources_file = self.settings.get("files", {}).get("sources", "sources.txt")
+
+        if not os.path.exists(sources_file):
+            example_file = sources_file.replace('.txt', '.example.txt')
+            if os.path.exists(example_file):
+                # Copy example file to working file
+                import shutil
+                shutil.copy2(example_file, sources_file)
+                print(f"Created {sources_file} from {example_file}")
+            else:
+                # Create default sources file
+                with open(sources_file, 'w') as f:
+                    f.write("# Add your RSS feeds and websites here\n")
+                    f.write("# RSS feeds (automatically detected)\n")
+                    f.write("# https://example.com/feed.xml\n")
+                    f.write("\n")
+                    f.write("# Websites for scraping (automatically detected)\n")
+                    f.write("# https://example.com/news\n")
+                print(f"Created default {sources_file}")
 
     def _get_defaults(self) -> Dict:
         """Get default settings."""

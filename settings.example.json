@@ -1,4 +1,24 @@
 {
+  "ollama": {
+    "host": "localhost",
+    "model": "smollm2:135m",
+    "overview_model": "llama2",
+    "timeout": 120
+  },
+  "processing": {
+    "max_overview_summaries": 50,
+    "scrape_timeout": 30,
+    "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+  },
+  "prompts": {
+    "article_summary": "Summarize this article briefly:",
+    "overview_summary": "Based on the following news summaries, provide a comprehensive overview..."
+  },
+  "files": {
+    "sources": "sources.txt",
+    "summaries": "summaries.json",
+    "database": "news_reader.db"
+  },
   "summarizer": {
     "provider": "ollama",
     "config": {
@@ -7,19 +27,6 @@
       "timeout": 120,
       "preferred_language": "en"
     }
-  },
-  "processing": {
-    "max_overview_summaries": 50,
-    "scrape_timeout": 30,
-    "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
-  },
-  "prompts": {
-    "article_summary": "Analyze this article and provide:\n1. A brief summary (2-3 sentences)\n2. The main category (choose from: Politics, Business/Economy, Technology, Science/Health, Sports, Entertainment, Crime/Law, International, US News, Environment, Education, Other)\n3. Key facts or data points mentioned\n\nFormat your response as:\nSUMMARY: [your summary]\nCATEGORY: [category name]\nKEY POINTS: [bullet points]",
-    "overview_summary": "Based on the following categorized news summaries, provide a comprehensive overview of the current state of the world organized by news categories..."
-  },
-  "files": {
-    "sources": "sources.txt",
-    "database": "news_reader.db"
   },
   "output": [
     {

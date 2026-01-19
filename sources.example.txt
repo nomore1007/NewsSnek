@@ -1,0 +1,6 @@
+# Add your RSS feeds and websites here
+# RSS feeds (automatically detected)
+# https://example.com/feed.xml
+
+# Websites for scraping (automatically detected)
+# https://example.com/news
