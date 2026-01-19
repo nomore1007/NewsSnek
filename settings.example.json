@@ -28,5 +28,6 @@
         "output_file": null
       }
     }
-  ]
+  ],
+  "interval": 60
 }

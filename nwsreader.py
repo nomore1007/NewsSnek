@@ -355,7 +355,8 @@ class NewsReaderConfig:
                         "output_file": None
                     }
                 }
-            ]
+            ],
+            "interval": 60
         }
 
     def _save_settings(self):
@@ -406,6 +407,18 @@ class NewsReaderConfig:
                     print(f"Warning: {e}")
 
         return channels
+
+    def get_interval(self) -> int:
+        """Get the run interval in minutes from settings or environment."""
+        import os
+        # First check settings file, then environment variable
+        interval = self.settings.get('interval', os.getenv('INTERVAL'))
+        if interval is None:
+            return 60  # Default 60 minutes
+        try:
+            return int(interval)
+        except (ValueError, TypeError):
+            return 60  # Default if invalid
 
 
 # ============================================================================
@@ -2622,15 +2635,18 @@ if __name__ == "__main__":
         print("="*60)
 
     # Handle continuous running with interval
-    if args.interval and args.interval > 0:
+    # Use command line arg if provided, otherwise use config setting
+    run_interval = args.interval if args.interval and args.interval > 0 else config.get_interval()
+
+    if run_interval > 0:
         import time
-        print(f"\n🔄 Running in continuous mode with {args.interval} minute intervals...")
+        print(f"\n🔄 Running in continuous mode with {run_interval} minute intervals...")
         print("Press Ctrl+C to stop")
 
         try:
             while True:
                 # Wait for the specified interval
-                time.sleep(args.interval * 60)
+                time.sleep(run_interval * 60)
 
                 print(f"\n{'='*80}")
                 print(f"🔄 Starting scheduled run at {time.strftime('%Y-%m-%d %H:%M:%S')}")
@@ -2695,7 +2711,7 @@ if __name__ == "__main__":
                 if skipped_sources > 0:
                     print(f"🚫 Skipped {skipped_sources} unreliable sources")
 
-                print(f"⏰ Next run in {args.interval} minutes...")
+                print(f"⏰ Next run in {run_interval} minutes...")
 
         except KeyboardInterrupt:
             print("\n\n🛑 Continuous mode stopped by user")

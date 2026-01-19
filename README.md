@@ -95,13 +95,21 @@ A sophisticated Python-based RSS feed reader and web scraper that summarizes art
        volumes:
          - ./data:/app/data
        environment:
-         - INTERVAL=60
+         - INTERVAL=60  # Optional: override settings.json interval
        restart: unless-stopped
    ```
 
    **Note**: This deployment does not include an Ollama server. You must have Ollama running separately and configured in your `settings.json` file.
 
    **Configuration**: After deployment, use Portainer's container file manager to edit `/app/settings.json` and `/app/sources.txt` inside the running container.
+
+   **Interval Setting**: Configure the run interval in `/app/settings.json`:
+   ```json
+   {
+     "interval": 60
+   }
+   ```
+   Or override with environment variable `INTERVAL=30`.
 
 ### Continuous Monitoring
 

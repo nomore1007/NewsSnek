@@ -235,7 +235,7 @@ The application is containerized and ready for deployment via Portainer or Docke
        volumes:
          - /path/to/data:/app/data
        environment:
-         - INTERVAL=60
+         - INTERVAL=60  # Optional: override settings.json interval
        restart: unless-stopped
    ```
 
@@ -243,7 +243,17 @@ The application is containerized and ready for deployment via Portainer or Docke
 
 #### Environment Variables
 
-- `INTERVAL`: Run interval in minutes (default: 60)
+- `INTERVAL`: Override run interval in minutes (optional, defaults to settings.json value)
+
+#### Configuration
+
+Configure the run interval in `settings.json`:
+
+```json
+{
+  "interval": 60
+}
+```
 
 #### Ollama Configuration
 
