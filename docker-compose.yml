@@ -4,7 +4,6 @@ services:
       context: .
       dockerfile: Dockerfile
       pull: true
-      no-cache: true
     container_name: news-reader
     volumes:
       - ./data:/app/data
