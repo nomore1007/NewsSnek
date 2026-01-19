@@ -6,8 +6,8 @@ services:
     container_name: news-reader
     volumes:
       - ./data:/app/data
-      - ./settings.json:/app/settings.json:ro
-      - ./sources.txt:/app/sources.txt:ro
+      - ./settings.json:/app/settings.json
+      - ./sources.txt:/app/sources.txt
     environment:
       - INTERVAL=${INTERVAL:-60}
       - PYTHONPATH=/app

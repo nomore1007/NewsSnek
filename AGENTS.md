@@ -248,8 +248,8 @@ The application is containerized and ready for deployment via Portainer or Docke
 #### Volume Mounts
 
 - `/app/data`: Persistent storage for database and generated files
-- `/app/settings.json`: Configuration file (read-only recommended)
-- `/app/sources.txt`: News sources file (read-only recommended)
+- `/app/settings.json`: Configuration file (writable for easy editing)
+- `/app/sources.txt`: News sources file (writable for easy editing)
 
 ### Continuous Operation
 
