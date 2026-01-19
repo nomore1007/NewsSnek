@@ -2501,12 +2501,12 @@ if __name__ == "__main__":
     data_manager = DataManager(config)
     output_channels = config.get_output_channels()
 
-    # Set defaults from settings (backward compatibility)
-    default_host = settings["ollama"]["host"]
-    default_model = settings["ollama"]["model"]
-    default_timeout = settings["ollama"]["timeout"]
-    default_sources_file = settings["files"]["sources"]
-    default_summaries_file = settings["files"]["summaries"]
+    # Set defaults from settings (backward compatibility) with safe access
+    default_host = settings.get("ollama", {}).get("host", "localhost")
+    default_model = settings.get("ollama", {}).get("model", "smollm2:135m")
+    default_timeout = settings.get("ollama", {}).get("timeout", 120)
+    default_sources_file = settings.get("files", {}).get("sources", "sources.txt")
+    default_summaries_file = settings.get("files", {}).get("summaries", "summaries.json")
 
     parser = argparse.ArgumentParser(description="Summarize RSS feeds or scrape websites using a remote Ollama model.")
     parser.add_argument("--url", "-u", help="Single RSS feed URL or website URL")
@@ -2516,12 +2516,13 @@ if __name__ == "__main__":
     parser.add_argument("--migrate", action="store_true", help="Migrate data from JSON files to SQLite database")
     parser.add_argument("--export-overview", action="store_true", help="Export latest overview to file for Home Assistant TTS")
     parser.add_argument("--model", "-m", default=default_model, help=f"Model name on Ollama host (default: {default_model})")
-    parser.add_argument("--overview-model", default=settings["ollama"]["overview_model"], help=f"Model for overview generation (default: {settings['ollama']['overview_model']})")
+    overview_model_default = settings.get("ollama", {}).get("overview_model", "llama2")
+    parser.add_argument("--overview-model", default=overview_model_default, help=f"Model for overview generation (default: {overview_model_default})")
     parser.add_argument("--host", "-H", default=default_host, help=f"Ollama host IP or hostname (default: {default_host})")
     parser.add_argument("--timeout", "-t", type=int, default=default_timeout, help=f"Timeout for requests (default: {default_timeout})")
     parser.add_argument("--output", "-o", default=default_summaries_file, help=f"Path to output file (default: {default_summaries_file})")
-    parser.add_argument("--article-prompt", default=settings["prompts"]["article_summary"], help="Custom prompt for article summarization")
-    parser.add_argument("--overview-prompt", default=settings["prompts"]["overview_summary"], help="Custom prompt for overview generation")
+    parser.add_argument("--article-prompt", default=settings.get("prompts", {}).get("article_summary", "Summarize this article briefly:"), help="Custom prompt for article summarization")
+    parser.add_argument("--overview-prompt", default=settings.get("prompts", {}).get("overview_summary", "Based on the following news summaries, provide a comprehensive overview..."), help="Custom prompt for overview generation")
     parser.add_argument("--interval", "-i", type=int, help="Run in a loop with specified interval in minutes (for continuous monitoring)")
     args = parser.parse_args()
 
@@ -2559,13 +2560,14 @@ if __name__ == "__main__":
     # Handle overview generation (doesn't require URLs)
     if args.overview:
         print("🌍 Generating state of the world overview...")
-        overview_model = getattr(args, 'overview_model', settings["ollama"]["overview_model"])
-        overview_prompt = getattr(args, 'overview_prompt', settings["prompts"]["overview_summary"])
+        overview_model = getattr(args, 'overview_model', settings.get("ollama", {}).get("overview_model", "llama2"))
+        overview_prompt = getattr(args, 'overview_prompt', settings.get("prompts", {}).get("overview_summary", "Based on the following news summaries, provide a comprehensive overview..."))
         # Create overview summarizer with overview model
         overview_config = SummarizerConfig('ollama', host=args.host, model=overview_model, timeout=300)
         overview_summarizer = SummarizerFactory.create_summarizer(overview_config)
 
-        overview = generate_world_overview(overview_summarizer, summaries, overview_prompt, settings["processing"]["max_overview_summaries"])
+        max_summaries = settings.get("processing", {}).get("max_overview_summaries", 50)
+        overview = generate_world_overview(overview_summarizer, summaries, overview_prompt, max_summaries)
 
         # Save overview (database by default, can be configured for file)
         saved_path = save_overview(overview, use_database=True)
@@ -2614,11 +2616,13 @@ if __name__ == "__main__":
 
         if args.scrape or source_type == "website":
             print(f"🌐 Scraping website: {url}")
-            process_website(url, summarizer, content_extractor, summaries, output_channels, settings["prompts"]["article_summary"], args.timeout)
+            article_prompt = settings.get("prompts", {}).get("article_summary", "Summarize this article briefly:")
+            process_website(url, summarizer, content_extractor, summaries, output_channels, article_prompt, args.timeout)
             website_count += 1
         else:  # RSS feed
             print(f"📡 Processing RSS feed: {url}")
-            summarize_rss_feed(url, summarizer, summaries, content_extractor, settings["prompts"]["article_summary"], args.timeout)
+            article_prompt = settings.get("prompts", {}).get("article_summary", "Summarize this article briefly:")
+            summarize_rss_feed(url, summarizer, summaries, content_extractor, article_prompt, args.timeout)
             rss_count += 1
 
     # Report final statistics
@@ -2672,17 +2676,21 @@ if __name__ == "__main__":
 
                     if args.scrape or source_type == "website":
                         print(f"🌐 Processing website: {url}")
-                        process_website(url, summarizer, content_extractor, summaries, output_channels, settings["prompts"]["article_summary"], args.timeout)
+                        article_prompt = settings.get("prompts", {}).get("article_summary", "Summarize this article briefly:")
+                        process_website(url, summarizer, content_extractor, summaries, output_channels, article_prompt, args.timeout)
                         website_count += 1
                     else:  # RSS feed
                         print(f"📡 Processing RSS feed: {url}")
-                        summarize_rss_feed(url, summarizer, summaries, content_extractor, settings["prompts"]["article_summary"], args.timeout)
+                        article_prompt = settings.get("prompts", {}).get("article_summary", "Summarize this article briefly:")
+                        summarize_rss_feed(url, summarizer, summaries, content_extractor, article_prompt, args.timeout)
                         rss_count += 1
 
                 # Generate overview if requested
                 if args.overview:
                     print("🌍 Generating state of the world overview...")
-                    overview = generate_world_overview(summarizer, summaries, settings["prompts"]["overview_summary"], settings["processing"]["max_overview_summaries"])
+                    overview_prompt_final = settings.get("prompts", {}).get("overview_summary", "Based on the following news summaries, provide a comprehensive overview...")
+                    max_summaries_final = settings.get("processing", {}).get("max_overview_summaries", 50)
+                    overview = generate_world_overview(summarizer, summaries, overview_prompt_final, max_summaries_final)
 
                     if overview:
                         saved_path = save_overview(overview)
