@@ -101,7 +101,7 @@ A sophisticated Python-based RSS feed reader and web scraper that summarizes art
 
    **Note**: This deployment does not include an Ollama server. You must have Ollama running separately and configured in your `settings.json` file.
 
-   **Configuration**: After deployment, use Portainer's container file manager to edit `/app/settings.json` and `/app/sources.txt` inside the running container.
+   **Configuration**: After deployment, use Portainer's container file manager to edit `/app/settings.json` and `/app/sources.txt` inside the running container. The container will create default versions of these files on first run.
 
    **Interval Setting**: Configure the run interval in `/app/settings.json`:
    ```json

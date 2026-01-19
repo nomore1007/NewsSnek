@@ -124,6 +124,7 @@ daily_news_overview.txt
 overviews/
 
 # Configuration files (may contain secrets)
+# Note: settings.example.json is tracked, copy it to settings.json and customize
 settings.json
 
 # Log files
