@@ -192,7 +192,7 @@ The application is containerized and ready for deployment via Portainer or Docke
 
 #### Prerequisites
 - Docker and Docker Compose installed
-- Ollama accessible (either local or remote)
+- Ollama server running (user-provided)
 
 #### Quick Start with Docker Compose
 
@@ -243,7 +243,23 @@ The application is containerized and ready for deployment via Portainer or Docke
 #### Environment Variables
 
 - `INTERVAL`: Run interval in minutes (default: 60)
-- `OLLAMA_HOST`: Ollama server address (default: localhost:11434)
+
+#### Ollama Configuration
+
+Configure your Ollama server address in `settings.json`:
+
+```json
+{
+  "summarizer": {
+    "config": {
+      "host": "your-ollama-server-ip",
+      "model": "smollm2:135m"
+    }
+  }
+}
+```
+
+Or set the `OLLAMA_HOST` environment variable if not using settings.json.
 
 #### Volume Mounts
 

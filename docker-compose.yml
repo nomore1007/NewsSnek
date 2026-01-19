@@ -13,17 +13,3 @@ services:
       - PYTHONPATH=/app
     restart: unless-stopped
     command: ["python3", "nwsreader.py", "--file", "sources.txt", "--overview", "--interval", "${INTERVAL}"]
-    depends_on:
-      - ollama
-
-  ollama:
-    image: ollama/ollama:latest
-    container_name: ollama
-    volumes:
-      - ollama_data:/root/.ollama
-    ports:
-      - "11434:11434"
-    restart: unless-stopped
-
-volumes:
-  ollama_data:

@@ -95,10 +95,14 @@ A sophisticated Python-based RSS feed reader and web scraper that summarizes art
        image: news-reader:latest
        volumes:
          - ./data:/app/data
+         - ./settings.json:/app/settings.json
+         - ./sources.txt:/app/sources.txt
        environment:
          - INTERVAL=60
        restart: unless-stopped
    ```
+
+   **Note**: This deployment does not include an Ollama server. You must have Ollama running separately and configured in your `settings.json` file.
 
 ### Continuous Monitoring
 
@@ -115,7 +119,7 @@ python3 nwsreader.py --file sources.txt --overview
 ## Requirements
 
 - Python 3.8+
-- Ollama (for AI summarization)
+- Ollama server (user-provided, for AI summarization)
 - Optional: langdetect, googletrans for translation
 
 ## Documentation
