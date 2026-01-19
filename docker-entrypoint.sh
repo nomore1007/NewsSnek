@@ -12,14 +12,11 @@ if [ ! -f "/app/settings.json" ]; then
         echo "Warning: No settings.example.json found, creating minimal settings.json"
         cat > "/app/settings.json" << EOF
 {
-  "summarizer": {
-    "provider": "ollama",
-    "config": {
-      "host": "localhost",
-      "model": "smollm2:135m",
-      "timeout": 120,
-      "preferred_language": "en"
-    }
+  "ollama": {
+    "host": "localhost",
+    "model": "smollm2:135m",
+    "overview_model": "llama2",
+    "timeout": 120
   },
   "processing": {
     "max_overview_summaries": 50,
@@ -32,7 +29,17 @@ if [ ! -f "/app/settings.json" ]; then
   },
   "files": {
     "sources": "sources.txt",
+    "summaries": "summaries.json",
     "database": "news_reader.db"
+  },
+  "summarizer": {
+    "provider": "ollama",
+    "config": {
+      "host": "localhost",
+      "model": "smollm2:135m",
+      "timeout": 120,
+      "preferred_language": "en"
+    }
   },
   "output": [
     {
@@ -41,7 +48,8 @@ if [ ! -f "/app/settings.json" ]; then
         "output_file": null
       }
     }
-  ]
+  ],
+  "interval": 60
 }
 EOF
     fi
