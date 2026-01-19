@@ -229,7 +229,6 @@ The application is containerized and ready for deployment via Portainer or Docke
    - Go to Portainer → Stacks
    - Create new stack with the following compose:
    ```yaml
-   version: '3.8'
    services:
      news-reader:
        image: news-reader:latest
@@ -239,6 +238,8 @@ The application is containerized and ready for deployment via Portainer or Docke
          - INTERVAL=60
        restart: unless-stopped
    ```
+
+   **Configuration**: After deployment, use Portainer's container editor to modify the configuration files inside the container at `/app/settings.json` and `/app/sources.txt`.
 
 #### Environment Variables
 
@@ -264,8 +265,16 @@ Or set the `OLLAMA_HOST` environment variable if not using settings.json.
 #### Volume Mounts
 
 - `/app/data`: Persistent storage for database and generated files
-- `/app/settings.json`: Configuration file (writable for easy editing)
-- `/app/sources.txt`: News sources file (writable for easy editing)
+
+#### Configuration
+
+Configuration files are created automatically inside the container. To modify them:
+
+1. **Through Portainer**: Use the container file editor to modify `/app/settings.json` and `/app/sources.txt`
+2. **Through Docker**: Use `docker exec` to edit files inside the running container
+3. **Rebuild**: Modify the files in your repository and redeploy
+
+**Note**: Configuration files are not mounted as external volumes to avoid deployment issues when files don't exist on the host.
 
 ### Continuous Operation
 

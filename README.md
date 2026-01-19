@@ -89,20 +89,19 @@ A sophisticated Python-based RSS feed reader and web scraper that summarizes art
 
 3. **Portainer Stack**
    ```yaml
-   version: '3.8'
    services:
      news-reader:
        image: news-reader:latest
        volumes:
          - ./data:/app/data
-         - ./settings.json:/app/settings.json
-         - ./sources.txt:/app/sources.txt
        environment:
          - INTERVAL=60
        restart: unless-stopped
    ```
 
    **Note**: This deployment does not include an Ollama server. You must have Ollama running separately and configured in your `settings.json` file.
+
+   **Configuration**: After deployment, use Portainer's container file manager to edit `/app/settings.json` and `/app/sources.txt` inside the running container.
 
 ### Continuous Monitoring
 
