@@ -21,6 +21,9 @@ COPY . .
 # Create data directory for persistent storage
 RUN mkdir -p /app/data
 
+# Make entrypoint script executable
+RUN chmod +x /app/docker-entrypoint.sh
+
 # Set environment variables
 ENV PYTHONPATH=/app
 ENV PYTHONUNBUFFERED=1
@@ -28,6 +31,9 @@ ENV PYTHONUNBUFFERED=1
 # Create non-root user
 RUN useradd --create-home --shell /bin/bash app && chown -R app:app /app
 USER app
+
+# Use entrypoint script
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
 
 # Default command - can be overridden by Portainer
 CMD ["python3", "nwsreader.py", "--file", "sources.txt", "--overview", "--interval", "60"]
