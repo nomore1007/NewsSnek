@@ -278,13 +278,17 @@ Or set the `OLLAMA_HOST` environment variable if not using settings.json.
 
 #### Configuration
 
-Configuration files are created automatically inside the container. To modify them:
+Configuration files are created automatically from example templates on first run:
+
+1. **settings.json**: Created from `settings.example.json`
+2. **sources.txt**: Created from `sources.example.txt`
+
+To modify them after deployment:
 
 1. **Through Portainer**: Use the container file editor to modify `/app/settings.json` and `/app/sources.txt`
 2. **Through Docker**: Use `docker exec` to edit files inside the running container
-3. **Rebuild**: Modify the files in your repository and redeploy
 
-**Note**: Configuration files are not mounted as external volumes to avoid deployment issues when files don't exist on the host.
+**Note**: Working configuration files are created at runtime and persist in the container's data volume.
 
 ### Continuous Operation
 

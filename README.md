@@ -27,13 +27,10 @@ A sophisticated Python-based RSS feed reader and web scraper that summarizes art
    ```
 
 3. **Configure settings**
-   ```bash
-   cp settings.example.json settings.json
-   # Edit settings.json with your configuration
-   ```
+   The application will automatically create `settings.json` from `settings.example.json` on first run. Edit the created `settings.json` with your configuration.
 
 4. **Add news sources**
-   Edit `sources.txt` with your RSS feeds and websites.
+   The application will automatically create `sources.txt` from `sources.example.txt` on first run. Edit the created `sources.txt` with your RSS feeds and websites.
 
 5. **Run the news reader**
    ```bash
