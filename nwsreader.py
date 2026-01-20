@@ -308,14 +308,21 @@ class NewsReaderConfig:
 
     def _load_settings(self):
         """Load settings from JSON file with defaults."""
-        # Check for settings in current directory (which may be mounted)
-        if os.path.exists(self.settings_file):
-            try:
-                with open(self.settings_file, 'r') as f:
-                    self.settings = json.load(f)
-                return
-            except json.JSONDecodeError:
-                print(f"Warning: Invalid JSON in {self.settings_file}, will recreate from example")
+        # Check for settings in multiple locations
+        settings_paths = [
+            self.settings_file,  # Default location
+            "settings.json",     # Alternative location
+        ]
+
+        for path in settings_paths:
+            if os.path.exists(path):
+                try:
+                    with open(path, 'r') as f:
+                        self.settings = json.load(f)
+                    return
+                except json.JSONDecodeError:
+                    print(f"Warning: Invalid JSON in {path}, trying other locations")
+                    continue
 
         # Create settings.json from example if it doesn't exist
         example_file = "settings.example.json"
@@ -340,27 +347,41 @@ class NewsReaderConfig:
         """Ensure sources.txt exists, creating from example if needed."""
         sources_file = self.settings.get("files", {}).get("sources", "sources.txt")
 
-        if os.path.exists(sources_file):
-            return  # File already exists
+        sources_paths = [
+            sources_file,        # Configured location
+            "sources.txt",       # Default location
+        ]
+
+        for path in sources_paths:
+            if os.path.exists(path):
+                # Update settings to point to the found file
+                self.settings["files"]["sources"] = path
+                return  # File found
 
         # Create sources.txt from example
-        example_file = "sources.example.txt"
-        if os.path.exists(example_file):
-            # Copy example file to working file
-            import shutil
-            shutil.copy2(example_file, sources_file)
-            print(f"✅ Created {sources_file} from {example_file}")
-        else:
-            # Create default sources file
-            with open(sources_file, 'w') as f:
-                f.write("# Add your RSS feeds and websites here\n")
-                f.write("# RSS feeds (automatically detected)\n")
-                f.write("https://feeds.bbci.co.uk/news/rss.xml\n")
-                f.write("https://rss.cnn.com/rss/edition.rss\n")
-                f.write("\n")
-                f.write("# Websites for scraping (automatically detected)\n")
-                f.write("# https://example.com/news\n")
-            print(f"✅ Created default {sources_file} with sample feeds")
+        example_paths = [
+            "sources.example.txt",
+            "/app/sources.example.txt"
+        ]
+
+        for example_file in example_paths:
+            if os.path.exists(example_file):
+                # Copy example file to working file
+                import shutil
+                shutil.copy2(example_file, sources_file)
+                print(f"✅ Created {sources_file} from {example_file}")
+                return
+
+        # Create default sources file
+        with open(sources_file, 'w') as f:
+            f.write("# Add your RSS feeds and websites here\n")
+            f.write("# RSS feeds (automatically detected)\n")
+            f.write("https://feeds.bbci.co.uk/news/rss.xml\n")
+            f.write("https://rss.cnn.com/rss/edition.rss\n")
+            f.write("\n")
+            f.write("# Websites for scraping (automatically detected)\n")
+            f.write("# https://example.com/news\n")
+        print(f"✅ Created default {sources_file} with sample feeds")
 
     def _get_defaults(self) -> Dict:
         """Get default settings."""

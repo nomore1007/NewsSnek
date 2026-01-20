@@ -15,20 +15,11 @@ COPY requirements.txt .
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application code (excluding files we don't need in container)
-COPY *.py /app/
-COPY *.txt /app/
-COPY *.json /app/
-COPY docker-entrypoint.sh /app/
+# Copy application code
+COPY . .
 
-# Verify entrypoint script is present and executable
-RUN echo "=== Verifying docker-entrypoint.sh ===" && \
-    ls -la /app/docker-entrypoint.sh && \
-    test -x /app/docker-entrypoint.sh && \
-    echo "✅ Entrypoint script is executable" || (echo "❌ Making executable" && chmod +x /app/docker-entrypoint.sh)
-
-# Debug: Show key files
-RUN echo "=== Key files in /app ===" && ls -la /app/*.py /app/*.sh /app/*.json /app/*.txt 2>/dev/null || echo "Some files missing"
+# Make entrypoint script executable
+RUN chmod +x docker-entrypoint.sh
 
 # Create data directory for persistent storage
 RUN mkdir -p /app/data
