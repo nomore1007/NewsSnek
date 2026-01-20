@@ -128,4 +128,4 @@ ls -la /app/ | grep -E "(settings|sources)" || echo "Config files not found in a
 echo "🎯 NewsSnek is ready to run!"
 
 # Switch to app user and execute command
-exec su-exec app "$@"
+exec sudo -u app "$@"
