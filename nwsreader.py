@@ -2517,13 +2517,13 @@ def process_single_article(url: str, title: str, content: str, summarizer: Summa
 
     summary_result = summarizer.summarize(content, prompt)
 
-            # Check if summarization was successful
-            if not summary_result.success:
-                print(f"❌ Summarization failed: {summary_result.error}")
-                print(f"   Article title: {title}")
-                print(f"   Content length: {len(content)} chars")
-                print("⏭️ Skipping article - not marking as complete\n")
-                return
+    # Check if summarization was successful
+    if not summary_result.success:
+        print(f"❌ Summarization failed: {summary_result.error}")
+        print(f"   Article title: {title}")
+        print(f"   Content length: {len(content)} chars")
+        print("⏭️ Skipping article - not marking as complete\n")
+        return
 
     summary = summary_result.content
 

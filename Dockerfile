@@ -24,14 +24,16 @@ RUN chmod +x docker-entrypoint.sh
 # Create data directory for persistent storage
 RUN mkdir -p /app/data
 
-# Note: Config files are created by entrypoint script to ensure they exist
+# Config files will be created by entrypoint script in the data directory for persistence
 
 # Set environment variables
 ENV PYTHONPATH=/app
 ENV PYTHONUNBUFFERED=1
 
-# Create non-root user
-RUN useradd --create-home --shell /bin/bash app && chown -R app:app /app
+# Create non-root user and ensure proper permissions
+RUN useradd --create-home --shell /bin/bash app && \
+    chown -R app:app /app && \
+    chmod -R 755 /app
 USER app
 
 # Use entrypoint script

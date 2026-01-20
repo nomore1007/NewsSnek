@@ -1,39 +1,26 @@
 #!/bin/bash
 
 # Entrypoint script for NewsSnek container
-# Ensures configuration files exist before starting the application
+# Config files are created during Docker build, this script handles user overrides
 
-# Ensure config directory exists and has basic files
-echo "Entrypoint: Setting up configuration files..."
+echo "=== NewsSnek Entrypoint v$(cat /app/VERSION 2>/dev/null | grep VERSION | cut -d'=' -f2 || echo 'unknown') ==="
+echo "Ensuring persistent configuration files exist..."
 
-# Create host directory if it doesn't exist (for volume mount)
-mkdir -p /opt/newssnek
+# Ensure data directory exists
+mkdir -p /app/data
 
-# List current files for debugging
-echo "Contents of /opt/newssnek (host mount):"
-ls -la /opt/newssnek/ || echo "Cannot list /opt/newssnek"
-
-echo "Contents of /app (example files):"
-ls -la /app/ | grep -E "(settings|sources)" || echo "No example files found in /app"
-
-# Copy example files to the normal container location (which is mounted to host)
-# This ensures files are created in /app and visible on host through volume mount
-echo "Creating configuration files..."
-
-if [ -f "/app/settings.example.json" ]; then
-    cp "/app/settings.example.json" "/app/settings.json"
-    echo "✅ Created settings.json from example file"
-elif [ -f "/app/settings.json" ]; then
-    echo "✅ settings.json already exists"
-else
-    # Create default settings.json
-    cat > "/app/settings.json" << 'EOF'
+# Ensure config files exist in persistent data directory
+if [ ! -f "/app/data/settings.json" ]; then
+    cat > "/app/data/settings.json" << 'EOF'
 {
-  "ollama": {
-    "host": "localhost",
-    "model": "smollm2:135m",
-    "overview_model": "llama2",
-    "timeout": 120
+  "summarizer": {
+    "provider": "ollama",
+    "config": {
+      "host": "localhost",
+      "model": "smollm2:135m",
+      "timeout": 120,
+      "preferred_language": "en"
+    }
   },
   "processing": {
     "max_overview_summaries": 50,
@@ -49,53 +36,69 @@ else
     "summaries": "summaries.json",
     "database": "news_reader.db"
   },
-  "summarizer": {
-    "provider": "ollama",
-    "config": {
-      "host": "localhost",
-      "model": "smollm2:135m",
-      "timeout": 120,
-      "preferred_language": "en"
-    }
-  },
   "output": [
     {
       "type": "console",
       "config": {
         "output_file": null
       }
+    },
+    {
+      "type": "telegram",
+      "config": {
+        "bot_token": "your-telegram-bot-token",
+        "chat_id": "your-chat-id"
+      }
+    },
+    {
+      "type": "discord",
+      "config": {
+        "webhook_url": "https://discord.com/api/webhooks/...",
+        "username": "News Reader",
+        "avatar_url": "https://example.com/avatar.png"
+      }
     }
   ],
   "interval": 60
 }
 EOF
-    echo "✅ Created default settings.json"
+    echo "✅ Created default settings.json in data directory"
+else
+    echo "✅ Using existing settings.json from data directory"
 fi
 
-if [ -f "/app/sources.example.txt" ]; then
-    cp "/app/sources.example.txt" "/app/sources.txt"
-    echo "✅ Created sources.txt from example file"
-elif [ -f "/app/sources.txt" ]; then
-    echo "✅ sources.txt already exists"
-else
-    # Create default sources.txt
-    cat > "/app/sources.txt" << 'EOF'
+if [ ! -f "/app/data/sources.txt" ]; then
+    cat > "/app/data/sources.txt" << 'EOF'
 # Add your RSS feeds and websites here
 # RSS feeds (automatically detected)
 https://feeds.bbci.co.uk/news/rss.xml
 https://rss.cnn.com/rss/edition.rss
+https://feeds.npr.org/1001/rss.xml
+https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml
+
+# YouTube RSS feeds
+https://www.youtube.com/feeds/videos.xml?channel_id=UCupvZG-5ko_eiXAupbDfxWw
+https://www.youtube.com/feeds/videos.xml?channel_id=UC16niRr50-MSBwiO3YDb3RA
 
 # Websites for scraping (automatically detected)
 # https://example.com/news
 EOF
-    echo "✅ Created default sources.txt"
+    echo "✅ Created default sources.txt in data directory"
+else
+    echo "✅ Using existing sources.txt from data directory"
 fi
 
-# Verify files exist
-echo "Files in /app:"
-ls -la /app/ | grep -E "(settings|sources)" || echo "Config files not found in /app"
+# Copy config files to /app for application use
+cp "/app/data/settings.json" "/app/settings.json"
+cp "/app/data/sources.txt" "/app/sources.txt"
 
-echo "Entrypoint: Configuration files ready"
+# Verify files exist and show version info
+echo "=== Configuration Complete ==="
+echo "Persistent config files in /app/data:"
+ls -la /app/data/ | grep -E "(settings|sources)" || echo "Config files not found in data directory"
 
-# Execute the main command
+echo "Runtime config files in /app:"
+ls -la /app/ | grep -E "(settings|sources)" || echo "Config files not found in app directory"
+
+echo "🎯 NewsSnek is ready to run!"
 exec "$@"
