@@ -308,10 +308,34 @@ class NewsReaderConfig:
 
     def _load_settings(self):
         """Load settings from JSON file with defaults."""
+        # Check for settings in /opt/config first (mounted volume), then current directory
+        config_paths = [
+            "/opt/config/settings.json",  # Mounted volume location
+            self.settings_file            # Default location
+        ]
+
+        settings_found = False
+        for settings_path in config_paths:
+            if os.path.exists(settings_path):
+                self.settings_file = settings_path
+                settings_found = True
+                break
+
         # Create settings.json from example if it doesn't exist
-        if not os.path.exists(self.settings_file):
-            example_file = self.settings_file.replace('.json', '.example.json')
-            if os.path.exists(example_file):
+        if not settings_found:
+            # Try to find example file in multiple locations
+            example_paths = [
+                "/opt/config/settings.example.json",
+                "settings.example.json"
+            ]
+
+            example_file = None
+            for ex_path in example_paths:
+                if os.path.exists(ex_path):
+                    example_file = ex_path
+                    break
+
+            if example_file:
                 # Copy example file to working file
                 import shutil
                 shutil.copy2(example_file, self.settings_file)
@@ -353,9 +377,34 @@ class NewsReaderConfig:
         """Ensure sources.txt exists, creating from example if needed."""
         sources_file = self.settings.get("files", {}).get("sources", "sources.txt")
 
-        if not os.path.exists(sources_file):
-            example_file = sources_file.replace('.txt', '.example.txt')
-            if os.path.exists(example_file):
+        # Check if sources file exists in mounted location or current directory
+        sources_paths = [
+            "/opt/config/sources.txt",  # Mounted volume location
+            sources_file                # Configured location
+        ]
+
+        sources_found = False
+        for src_path in sources_paths:
+            if os.path.exists(src_path):
+                # Update settings to point to the found file
+                self.settings["files"]["sources"] = src_path
+                sources_found = True
+                break
+
+        if not sources_found:
+            # Try to find example file in multiple locations
+            example_paths = [
+                "/opt/config/sources.example.txt",
+                "sources.example.txt"
+            ]
+
+            example_file = None
+            for ex_path in example_paths:
+                if os.path.exists(ex_path):
+                    example_file = ex_path
+                    break
+
+            if example_file:
                 # Copy example file to working file
                 import shutil
                 shutil.copy2(example_file, sources_file)

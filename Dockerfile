@@ -21,6 +21,11 @@ COPY . .
 # Create data directory for persistent storage
 RUN mkdir -p /app/data
 
+# Create config directory and copy example files
+RUN mkdir -p /opt/config && \
+    cp settings.example.json /opt/config/settings.json && \
+    cp sources.example.txt /opt/config/sources.txt
+
 # Make entrypoint script executable
 RUN chmod +x /app/docker-entrypoint.sh
 
