@@ -78,20 +78,24 @@ You can organize your news sources into groups that send to different output cha
 
 ```txt
 # News Sources Configuration
-# Format: [group-name] or [group-name:channel1,channel2]
+# Format: [group-name] or [group-name:channel1,channel2] or [group-name:channel1,channel2:custom prompt]
 
 [telegram-news]
-# General news sources for Telegram
+# General news sources for Telegram (default prompt)
 https://feeds.bbci.co.uk/news/rss.xml
 https://rss.cnn.com/rss/edition.rss
 
-[discord-tech]
-# Technology news for Discord
+[discord-tech:discord]
+# Technology news for Discord only
 https://feeds.feedburner.com/TechCrunch/
 https://www.reddit.com/r/technology/.rss
 
+[tech-analysis:telegram:Summarize this technical article focusing on key innovations and implications for developers]
+# Tech analysis with custom prompt for Telegram
+https://example.com/tech-analysis/rss.xml
+
 [all-channels]
-# Sources that go to all configured channels
+# Sources that go to all configured channels (default prompt)
 https://example.com/rss.xml
 ```
 
@@ -124,9 +128,20 @@ Update your `settings.json` to use named channels:
 
 #### Group-Channel Mapping
 
-- `[group-name]` - Sends to all configured channels
-- `[group-name:channel1,channel2]` - Sends only to specified channels
-- Empty groups use all channels by default
+- `[group-name]` - Sends to all configured channels (default prompt)
+- `[group-name:channel1,channel2]` - Sends only to specified channels (default prompt)
+- `[group-name:channel1,channel2:custom prompt]` - Sends to specified channels with custom prompt
+- `[group-name::custom prompt]` - Sends to all channels with custom prompt
+
+#### Custom Prompts
+
+Each group can have its own summarization prompt to tailor the AI's behavior:
+
+- **Tech articles**: Focus on technical details, innovations, and developer implications
+- **Business news**: Emphasize financial impact, market analysis, and business strategy
+- **General news**: Standard balanced summaries
+
+Prompts override the default `article_summary` prompt from `settings.json`.
 
 #### Backward Compatibility
 

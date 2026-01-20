@@ -1123,7 +1123,7 @@ class DiscordOutputChannel(OutputChannel):
 class SourceGroup:
     """Represents a group of sources that should be sent to specific output channels."""
 
-    def __init__(self, name: str, urls: List[str], output_channels: List[str]):
+    def __init__(self, name: str, urls: List[str], output_channels: List[str], prompt: Optional[str] = None):
         """
         Initialize a source group.
 
@@ -1131,18 +1131,20 @@ class SourceGroup:
             name: Group name (for identification)
             urls: List of source URLs in this group
             output_channels: List of output channel names this group should use
+            prompt: Custom summarization prompt for this group (optional)
         """
         self.name = name
         self.urls = urls
         self.output_channels = output_channels
+        self.prompt = prompt
 
     def __repr__(self):
-        return f"SourceGroup(name='{self.name}', urls={len(self.urls)}, channels={self.output_channels})"
+        return f"SourceGroup(name='{self.name}', urls={len(self.urls)}, channels={self.output_channels}, prompt={bool(self.prompt)})"
 
 
 def parse_source_groups(filepath: str) -> Dict[str, SourceGroup]:
     """
-    Parse sources file and return groups with their associated output channels.
+    Parse sources file and return groups with their associated output channels and prompts.
 
     Args:
         filepath: Path to sources file
@@ -1159,6 +1161,7 @@ def parse_source_groups(filepath: str) -> Dict[str, SourceGroup]:
         groups = {}
         current_urls = []
         current_channels = []
+        current_prompt = None
 
         for line in lines:
             line = line.strip()
@@ -1168,18 +1171,26 @@ def parse_source_groups(filepath: str) -> Dict[str, SourceGroup]:
             if line.startswith('[') and line.endswith(']'):
                 # Save previous group if exists
                 if current_group and current_urls:
-                    groups[current_group] = SourceGroup(current_group, current_urls, current_channels)
+                    groups[current_group] = SourceGroup(current_group, current_urls, current_channels, current_prompt)
 
                 # Start new group
                 group_header = line[1:-1]  # Remove brackets
-                if ':' in group_header:
-                    # Format: [group-name:channel1,channel2]
-                    group_name, channels_str = group_header.split(':', 1)
+
+                # Parse group header: [name:channels:prompt] or [name:channels] or [name]
+                parts = group_header.split(':')
+                group_name = parts[0]
+
+                current_channels = []
+                current_prompt = None
+
+                if len(parts) >= 2:
+                    # Has channels specification
+                    channels_str = parts[1]
                     current_channels = [c.strip() for c in channels_str.split(',') if c.strip()]
-                else:
-                    # Format: [group-name] - use default channels
-                    group_name = group_header
-                    current_channels = []  # Empty means use all channels
+
+                if len(parts) >= 3:
+                    # Has prompt specification
+                    current_prompt = ':'.join(parts[2:])  # Rejoin in case prompt contains colons
 
                 current_group = group_name
                 current_urls = []
@@ -1189,7 +1200,7 @@ def parse_source_groups(filepath: str) -> Dict[str, SourceGroup]:
 
         # Save final group
         if current_group and current_urls:
-            groups[current_group] = SourceGroup(current_group, current_urls, current_channels)
+            groups[current_group] = SourceGroup(current_group, current_urls, current_channels, current_prompt)
 
         return groups
 
@@ -1966,22 +1977,22 @@ def _create_default_sources_file(filepath: str) -> List[str]:
     """Create default sources file and return URLs."""
     default_content = """# News Sources Configuration
 # You can organize sources into groups that send to different output channels
-# Format: [group-name] followed by URLs
+# Format: [group-name] or [group-name:channel1,channel2:custom prompt]
 
 [telegram-news]
-# General news sources for Telegram
+# General news sources for Telegram (default prompt)
 https://feeds.bbci.co.uk/news/rss.xml
 https://rss.cnn.com/rss/edition.rss
 https://feeds.npr.org/1001/rss.xml
 
-[discord-updates]
-# Technology and business news for Discord
+[discord-tech:discord:Summarize this technology article, focusing on innovations, technical details, and industry impact]
+# Technology news for Discord with custom tech-focused prompt
 https://feeds.feedburner.com/TechCrunch/
 https://www.reddit.com/r/technology/.rss
 
 [all-channels]
-# Sources that go to all configured output channels
-# https://example.com/rss.xml
+# Sources that go to all configured channels (default prompt)
+# https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml
 """
 
     with open(filepath, "w") as f:
@@ -2859,10 +2870,11 @@ if __name__ == "__main__":
     website_count = 0
     skipped_sources = 0
 
-    # Create a mapping of URL to its output channels
+    # Create mappings for URL to channels and prompts
     url_channel_map = {}
+    url_prompt_map = {}
 
-    # If using grouped format, build channel mapping
+    # If using grouped format, build channel and prompt mappings
     if source_groups:
         for group in source_groups.values():
             for url in group.urls:
@@ -2870,12 +2882,17 @@ if __name__ == "__main__":
                     # Group specifies specific channels
                     url_channel_map[url] = group.output_channels
                 else:
-                    # Empty channel list means all channels
+                    # Empty channel list means use all channels
                     url_channel_map[url] = None
+
+                # Store group-specific prompt if available
+                if group.prompt:
+                    url_prompt_map[url] = group.prompt
     else:
-        # Flat format - all URLs go to all channels
+        # Flat format - all URLs go to all channels, use default prompt
         for url in urls:
             url_channel_map[url] = None
+            url_prompt_map[url] = None
 
     for url in urls:
         # Check if source should be excluded due to excessive failures
@@ -2890,18 +2907,24 @@ if __name__ == "__main__":
 
         source_type = detect_source_type(url)
 
+        # Get prompt for this URL (group-specific or default)
+        custom_prompt = url_prompt_map.get(url)
+        if custom_prompt:
+            article_prompt = custom_prompt
+            print(f"   📝 Using custom prompt: {custom_prompt[:50]}...")
+        else:
+            article_prompt = settings.get("prompts", {}).get("article_summary", "Summarize this article briefly:")
+
         if args.scrape or source_type == "website":
             print(f"🌐 Scraping website: {url}")
             if channel_names:
                 print(f"   📤 Channels: {', '.join(channel_names)}")
-            article_prompt = settings.get("prompts", {}).get("article_summary", "Summarize this article briefly:")
             process_website(url, summarizer, content_extractor, summaries, specific_channels, article_prompt, args.timeout)
             website_count += 1
         else:  # RSS feed
             print(f"📡 Processing RSS feed: {url}")
             if channel_names:
                 print(f"   📤 Channels: {', '.join(channel_names)}")
-            article_prompt = settings.get("prompts", {}).get("article_summary", "Summarize this article briefly:")
             summarize_rss_feed(url, summarizer, summaries, content_extractor, article_prompt, args.timeout, specific_channels)
             rss_count += 1
 
