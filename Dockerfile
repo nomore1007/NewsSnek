@@ -21,10 +21,10 @@ COPY . .
 # Create data directory for persistent storage
 RUN mkdir -p /app/data
 
-# Note: Config files are created by entrypoint script to work with volume mounts
+# Ensure entrypoint script exists and is executable
+RUN ls -la /app/docker-entrypoint.sh && chmod +x /app/docker-entrypoint.sh && ls -la /app/docker-entrypoint.sh
 
-# Make entrypoint script executable
-RUN chmod +x /app/docker-entrypoint.sh
+# Note: Config files are created by entrypoint script to work with volume mounts
 
 # Set environment variables
 ENV PYTHONPATH=/app
