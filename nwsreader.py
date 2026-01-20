@@ -324,24 +324,9 @@ class NewsReaderConfig:
                     print(f"Warning: Invalid JSON in {path}, trying other locations")
                     continue
 
-        # Create settings.json from example if it doesn't exist
-        example_file = "settings.example.json"
-        if os.path.exists(example_file):
-            # Copy example file to working file
-            import shutil
-            shutil.copy2(example_file, self.settings_file)
-            print(f"Created {self.settings_file} from {example_file}")
-            try:
-                with open(self.settings_file, 'r') as f:
-                    self.settings = json.load(f)
-            except json.JSONDecodeError:
-                # If copy resulted in invalid JSON, use defaults
-                self.settings = self._get_defaults()
-                self._save_settings()
-        else:
-            # Create from defaults if no example exists
-            self.settings = self._get_defaults()
-            self._save_settings()
+        # Config files are created by Docker entrypoint, use defaults as fallback
+        self.settings = self._get_defaults()
+        self._save_settings()
 
     def _ensure_sources_file(self):
         """Ensure sources.txt exists, creating from example if needed."""
@@ -358,21 +343,7 @@ class NewsReaderConfig:
                 self.settings["files"]["sources"] = path
                 return  # File found
 
-        # Create sources.txt from example
-        example_paths = [
-            "sources.example.txt",
-            "/app/sources.example.txt"
-        ]
-
-        for example_file in example_paths:
-            if os.path.exists(example_file):
-                # Copy example file to working file
-                import shutil
-                shutil.copy2(example_file, sources_file)
-                print(f"✅ Created {sources_file} from {example_file}")
-                return
-
-        # Create default sources file
+        # Create default sources file (entrypoint should have created this)
         with open(sources_file, 'w') as f:
             f.write("# Add your RSS feeds and websites here\n")
             f.write("# RSS feeds (automatically detected)\n")
