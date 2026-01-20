@@ -7,6 +7,7 @@ WORKDIR /app
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
     gcc \
+    su-exec \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first for better caching
@@ -34,9 +35,8 @@ ENV PYTHONUNBUFFERED=1
 RUN useradd --create-home --shell /bin/bash app && \
     chown -R app:app /app && \
     chmod -R 755 /app
-USER app
 
-# Use entrypoint script
+# Use entrypoint script (handles volume mount permissions)
 ENTRYPOINT ["/app/docker-entrypoint.sh"]
 
 # Default command - can be overridden by Portainer

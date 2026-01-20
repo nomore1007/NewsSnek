@@ -1,15 +1,37 @@
 #!/bin/bash
 
 # Entrypoint script for NewsSnek container
-# Config files are created during Docker build, this script handles user overrides
+# Handles configuration file management and volume mount permissions
+
+set -e
 
 echo "=== NewsSnek Entrypoint v$(cat /app/VERSION 2>/dev/null | grep VERSION | cut -d'=' -f2 || echo 'unknown') ==="
-echo "Setting up configuration files..."
 
-# First, ensure config files exist in /app (always writable by app user)
-if [ ! -f "/app/settings.json" ]; then
-    cat > "/app/settings.json" << 'EOF'
-{
+# Ensure data directory exists
+echo "Ensuring persistent configuration files exist..."
+mkdir -p /app/data
+
+# Get app user UID/GID
+APP_UID=$(id -u app)
+APP_GID=$(id -g app)
+
+# Fix data directory permissions if it's a volume mount
+if [ -d "/app/data" ]; then
+    echo "Checking /app/data directory permissions..."
+    # Check if we can write to the data directory
+    if ! touch /app/data/.test_write 2>/dev/null; then
+        echo "⚠️  Cannot write to /app/data - fixing permissions..."
+        chown -R ${APP_UID}:${APP_GID} /app/data
+        chmod -R 755 /app/data
+        echo "✅ Fixed /app/data permissions"
+    else
+        rm -f /app/data/.test_write
+        echo "✅ /app/data is writable"
+    fi
+fi
+
+# Default settings.json content
+DEFAULT_SETTINGS='{
   "summarizer": {
     "provider": "ollama",
     "config": {
@@ -57,14 +79,10 @@ if [ ! -f "/app/settings.json" ]; then
     }
   ],
   "interval": 60
-}
-EOF
-    echo "✅ Created default settings.json"
-fi
+}'
 
-if [ ! -f "/app/sources.txt" ]; then
-    cat > "/app/sources.txt" << 'EOF'
-# Add your RSS feeds and websites here
+# Default sources.txt content
+DEFAULT_SOURCES='# Add your RSS feeds and websites here
 # RSS feeds (automatically detected)
 https://feeds.bbci.co.uk/news/rss.xml
 https://rss.cnn.com/rss/edition.rss
@@ -76,35 +94,38 @@ https://www.youtube.com/feeds/videos.xml?channel_id=UCupvZG-5ko_eiXAupbDfxWw
 https://www.youtube.com/feeds/videos.xml?channel_id=UC16niRr50-MSBwiO3YDb3RA
 
 # Websites for scraping (automatically detected)
-# https://example.com/news
-EOF
-    echo "✅ Created default sources.txt"
-fi
+# https://example.com/news'
 
-# Try to create persistent copies in data directory if writable
-echo "Attempting to create persistent config files..."
-mkdir -p /app/data 2>/dev/null || echo "⚠️  Cannot create data directory"
-
-if [ -w "/app/data" ] 2>/dev/null; then
-    cp "/app/settings.json" "/app/data/settings.json" 2>/dev/null && echo "✅ Created persistent settings.json" || echo "⚠️  Could not create persistent settings.json"
-    cp "/app/sources.txt" "/app/data/sources.txt" 2>/dev/null && echo "✅ Created persistent sources.txt" || echo "⚠️  Could not create persistent sources.txt"
+# Create configuration files in /app/data (persistent volume)
+if [ ! -f "/app/data/settings.json" ]; then
+    echo "✅ Created default settings.json in data directory"
+    echo "$DEFAULT_SETTINGS" > /app/data/settings.json
+    chown ${APP_UID}:${APP_GID} /app/data/settings.json
 else
-    echo "⚠️  Data directory not writable - config files will not persist between container restarts"
+    echo "✅ Using existing settings.json from data directory"
 fi
 
-# Verify files exist and show version info
+if [ ! -f "/app/data/sources.txt" ]; then
+    echo "✅ Created default sources.txt in data directory"
+    echo "$DEFAULT_SOURCES" > /app/data/sources.txt
+    chown ${APP_UID}:${APP_GID} /app/data/sources.txt
+else
+    echo "✅ Using existing sources.txt from data directory"
+fi
+
+# Copy to /app for runtime use (ensures app user can access)
+cp /app/data/settings.json /app/settings.json
+cp /app/data/sources.txt /app/sources.txt
+
+# Verify configuration
 echo "=== Configuration Complete ==="
+echo "Persistent config files in /app/data:"
+ls -la /app/data/ | grep -E "(settings|sources)" || echo "Config files not found in data directory"
+
 echo "Runtime config files in /app:"
 ls -la /app/ | grep -E "(settings|sources)" || echo "Config files not found in app directory"
 
-echo "Checking persistence status..."
-if [ -d "/app/data" ] && [ -w "/app/data" ]; then
-    echo "Persistent config files in /app/data:"
-    ls -la /app/data/ | grep -E "(settings|sources)" || echo "No persistent config files found"
-    echo "✅ Config files will persist between container restarts"
-else
-    echo "⚠️  Config files will NOT persist - check volume mount permissions"
-fi
-
 echo "🎯 NewsSnek is ready to run!"
-exec "$@"
+
+# Switch to app user and execute command
+exec su-exec app "$@"

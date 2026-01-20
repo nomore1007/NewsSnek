@@ -74,23 +74,32 @@ A sophisticated Python-based RSS feed reader and web scraper that summarizes art
 
 ### Docker Deployment (Portainer)
 
-1. **Build the Docker image**
+1. **Prepare the host directory**
+   ```bash
+   # Create the data directory on your host
+   sudo mkdir -p /opt/newsnek
+   sudo chown -R 1000:1000 /opt/newsnek
+   ```
+
+   **Important**: The directory must be owned by UID 1000 (the app user in the container) or have 777 permissions for the container to write to it.
+
+2. **Build the Docker image**
    ```bash
    docker build -t news-reader .
    ```
 
-2. **Run with Docker**
+3. **Run with Docker**
    ```bash
-   docker run -v $(pwd)/data:/app/data news-reader
+   docker run -v /opt/newsnek:/app/data news-reader
    ```
 
-3. **Portainer Stack**
+4. **Portainer Stack**
    ```yaml
    services:
      news-reader:
        image: news-reader:latest
        volumes:
-         - ./data:/app/data
+         - /opt/newsnek:/app/data
        environment:
          - INTERVAL=60  # Optional: override settings.json interval
        restart: unless-stopped
@@ -98,15 +107,53 @@ A sophisticated Python-based RSS feed reader and web scraper that summarizes art
 
    **Note**: This deployment does not include an Ollama server. You must have Ollama running separately and configured in your `settings.json` file.
 
-   **Configuration**: After deployment, use Portainer's container file manager to edit `/app/settings.json` and `/app/sources.txt` inside the running container. The container will create default versions of these files on first run.
+   **Configuration**: The container will create default configuration files in the mounted volume (`/opt/newsnek` on host) on first run. To customize, edit these files directly on the host:
+   - `/opt/newsnek/settings.json` - Main configuration
+   - `/opt/newsnek/sources.txt` - News sources
 
-   **Interval Setting**: Configure the run interval in `/app/settings.json`:
+   **Interval Setting**: Configure the run interval in `/opt/newsnek/settings.json`:
    ```json
    {
      "interval": 60
    }
    ```
    Or override with environment variable `INTERVAL=30`.
+
+#### Troubleshooting Docker Deployment
+
+**Issue: Permission denied errors**
+```
+/app/docker-entrypoint.sh: line 14: /app/data/settings.json: Permission denied
+```
+
+**Solution**: Fix the host directory permissions
+```bash
+# Option 1: Change ownership to UID 1000
+sudo chown -R 1000:1000 /opt/newsnek
+
+# Option 2: Make directory writable by all users
+sudo chmod 777 /opt/newsnek
+```
+
+**Issue: Config files reset to defaults after restart**
+```
+Config files not found in data directory
+```
+
+**Solution**: Ensure the volume is correctly mounted
+```bash
+# Check if volume is mounted
+docker exec news-reader ls -la /app/data
+
+# Edit config files on the host, not in the container
+nano /opt/newsnek/settings.json
+nano /opt/newsnek/sources.txt
+```
+
+**Issue: Container won't start**
+- Check logs: `docker logs news-reader`
+- Verify Ollama server is accessible from the container
+- Ensure the host directory exists and has correct permissions
 
 ### Continuous Monitoring
 
