@@ -18,16 +18,26 @@ ls -la /app/ | grep -E "(settings|sources)" || echo "No example files found in /
 
 # Copy example files to the HOST directory (which is mounted to /opt/config)
 # This ensures files are created on the host and visible to the container
+echo "Creating configuration files..."
+
 if [ -f "/app/settings.example.json" ]; then
     cp "/app/settings.example.json" "/opt/newssnek/settings.json"
-    echo "✅ Created settings.json on host (/opt/newssnek/)"
+    if [ -f "/opt/newssnek/settings.json" ]; then
+        echo "✅ Successfully created settings.json on host (/opt/newssnek/)"
+    else
+        echo "❌ Failed to create settings.json - file not found after copy"
+    fi
 else
     echo "❌ ERROR: settings.example.json not found in /app/"
 fi
 
 if [ -f "/app/sources.example.txt" ]; then
     cp "/app/sources.example.txt" "/opt/newssnek/sources.txt"
-    echo "✅ Created sources.txt on host (/opt/newssnek/)"
+    if [ -f "/opt/newssnek/sources.txt" ]; then
+        echo "✅ Successfully created sources.txt on host (/opt/newssnek/)"
+    else
+        echo "❌ Failed to create sources.txt - file not found after copy"
+    fi
 else
     echo "❌ ERROR: sources.example.txt not found in /app/"
 fi
