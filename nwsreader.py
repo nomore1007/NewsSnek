@@ -425,9 +425,29 @@ class NewsReaderConfig:
         self.settings[key] = value
         self._save_settings()
 
-    def get_output_channels(self) -> List[Any]:
-        """Get configured output channels."""
-        output_settings = self.settings.get('output', [])
+    def get_output_channels(self, channel_names: Optional[List[str]] = None) -> List[Any]:
+        """
+        Get configured output channels.
+
+        Args:
+            channel_names: Optional list of channel names to filter by.
+                         If None, returns all available channels.
+
+        Returns:
+            List of configured output channel instances
+        """
+        output_settings = self.settings.get('output', {})
+
+        # Support both old array format and new named channels format
+        if isinstance(output_settings, list):
+            # Legacy format: array of channel configs
+            return self._get_output_channels_legacy(output_settings, channel_names)
+        else:
+            # New format: named channels object
+            return self._get_output_channels_named(output_settings, channel_names)
+
+    def _get_output_channels_legacy(self, output_settings: List[Dict], channel_names: Optional[List[str]] = None) -> List[Any]:
+        """Get output channels from legacy array format."""
         channels = []
 
         for channel_config in output_settings:
@@ -442,6 +462,33 @@ class NewsReaderConfig:
                         print(f"Warning: Output channel {channel_type} not available (not configured)")
                 except ValueError as e:
                     print(f"Warning: {e}")
+
+        return channels
+
+    def _get_output_channels_named(self, output_settings: Dict, channel_names: Optional[List[str]] = None) -> List[Any]:
+        """Get output channels from named channels format."""
+        channels = []
+
+        # If no specific channel names requested, get all channels
+        if channel_names is None:
+            channel_names = list(output_settings.get('channels', {}).keys())
+
+        for channel_name in channel_names:
+            channel_config = output_settings.get('channels', {}).get(channel_name)
+            if channel_config:
+                channel_type = channel_config.get('type')
+                if channel_type:
+                    config = OutputChannelConfig(channel_type, **channel_config.get('config', {}))
+                    try:
+                        channel = OutputChannelFactory.create_channel(config)
+                        if channel.is_available():
+                            channels.append(channel)
+                        else:
+                            print(f"Warning: Output channel '{channel_name}' ({channel_type}) not available (not configured)")
+                    except ValueError as e:
+                        print(f"Warning: {e}")
+            else:
+                print(f"Warning: Output channel '{channel_name}' not found in configuration")
 
         return channels
 
@@ -1073,6 +1120,84 @@ class DiscordOutputChannel(OutputChannel):
         return chunks
 
 
+class SourceGroup:
+    """Represents a group of sources that should be sent to specific output channels."""
+
+    def __init__(self, name: str, urls: List[str], output_channels: List[str]):
+        """
+        Initialize a source group.
+
+        Args:
+            name: Group name (for identification)
+            urls: List of source URLs in this group
+            output_channels: List of output channel names this group should use
+        """
+        self.name = name
+        self.urls = urls
+        self.output_channels = output_channels
+
+    def __repr__(self):
+        return f"SourceGroup(name='{self.name}', urls={len(self.urls)}, channels={self.output_channels})"
+
+
+def parse_source_groups(filepath: str) -> Dict[str, SourceGroup]:
+    """
+    Parse sources file and return groups with their associated output channels.
+
+    Args:
+        filepath: Path to sources file
+
+    Returns:
+        Dictionary mapping group names to SourceGroup objects
+    """
+    try:
+        with open(filepath, "r") as f:
+            content = f.read()
+
+        lines = content.split('\n')
+        current_group = None
+        groups = {}
+        current_urls = []
+        current_channels = []
+
+        for line in lines:
+            line = line.strip()
+            if not line or line.startswith('#'):
+                continue
+
+            if line.startswith('[') and line.endswith(']'):
+                # Save previous group if exists
+                if current_group and current_urls:
+                    groups[current_group] = SourceGroup(current_group, current_urls, current_channels)
+
+                # Start new group
+                group_header = line[1:-1]  # Remove brackets
+                if ':' in group_header:
+                    # Format: [group-name:channel1,channel2]
+                    group_name, channels_str = group_header.split(':', 1)
+                    current_channels = [c.strip() for c in channels_str.split(',') if c.strip()]
+                else:
+                    # Format: [group-name] - use default channels
+                    group_name = group_header
+                    current_channels = []  # Empty means use all channels
+
+                current_group = group_name
+                current_urls = []
+            elif current_group:
+                # URL in current group
+                current_urls.append(line)
+
+        # Save final group
+        if current_group and current_urls:
+            groups[current_group] = SourceGroup(current_group, current_urls, current_channels)
+
+        return groups
+
+    except FileNotFoundError:
+        print(f"⚠️ Sources file not found: {filepath}")
+        return {}
+
+
 class OutputChannelFactory:
     """Factory for creating output channel instances."""
 
@@ -1648,7 +1773,7 @@ def save_summaries(file_path: str, data: dict):
     except Exception as e:
         print(f"[Error saving summaries: {e}]")
 
-def summarize_rss_feed(rss_url: str, summarizer: Summarizer, summaries: Dict, content_extractor: ContentExtractor, prompt: str, timeout: int = 120):
+def summarize_rss_feed(rss_url: str, summarizer: Summarizer, summaries: Dict, content_extractor: ContentExtractor, prompt: str, timeout: int = 120, output_channels: Optional[List[Any]] = None):
     """
     Process an RSS feed, extract articles, and generate summaries.
 
@@ -1662,6 +1787,7 @@ def summarize_rss_feed(rss_url: str, summarizer: Summarizer, summaries: Dict, co
         content_extractor: Content extractor for fetching full article content
         prompt: Summarization prompt
         timeout: Request timeout in seconds
+        output_channels: List of output channels to send summaries to
     """
     error_tracking = load_error_tracking()
 
@@ -1738,6 +1864,18 @@ def summarize_rss_feed(rss_url: str, summarizer: Summarizer, summaries: Dict, co
             print(f"🏷️ Category: {category}")
             print(f"Summary: {summary}\n")
 
+            # Send summary to configured output channels
+            if output_channels:
+                for channel in output_channels:
+                    try:
+                        result = channel.send_summary(title, summary, rss_url, category)
+                        if result.success:
+                            print(f"✅ Sent to {type(channel).__name__}: {result.message}")
+                        else:
+                            print(f"❌ Failed to send to {type(channel).__name__}: {result.error}")
+                    except Exception as e:
+                        print(f"❌ Error sending to {type(channel).__name__}: {e}")
+
             summaries[feed_title].append({
                 "title": title,
                 "link": link,
@@ -1758,40 +1896,101 @@ def summarize_rss_feed(rss_url: str, summarizer: Summarizer, summaries: Dict, co
         save_error_tracking_to_db(error_tracking)
 
 def read_urls_from_file(filepath: str) -> List[str]:
+    """Read URLs from file, supporting both flat format and grouped format."""
     try:
         with open(filepath, "r") as f:
-            urls = []
-            for line in f:
-                line = line.strip()
-                if line and not line.startswith('#'):
-                    urls.append(line)
-            print(f"📄 Loaded {len(urls)} URLs from {filepath}:")
-            for i, url in enumerate(urls[:3]):  # Show first 3
-                print(f"   {i}. {url}")
-            if len(urls) > 3:
-                print(f"   ... and {len(urls) - 3} more")
-            return urls
+            content = f.read()
+
+        # Check if file uses grouped format (has section headers)
+        if '[' in content and ']' in content:
+            return _parse_grouped_sources(content, filepath)
+        else:
+            return _parse_flat_sources(content, filepath)
+
     except FileNotFoundError:
         print(f"⚠️ Sources file not found: {filepath}")
         print("Creating default sources file...")
+        return _create_default_sources_file(filepath)
 
-        # Create default sources file
-        default_urls = [
-            "https://feeds.bbci.co.uk/news/rss.xml",
-            "https://rss.cnn.com/rss/edition.rss"
-        ]
 
-        with open(filepath, "w") as f:
-            f.write("# Default RSS feeds\n")
-            for url in default_urls:
-                f.write(f"{url}\n")
+def _parse_flat_sources(content: str, filepath: str) -> List[str]:
+    """Parse traditional flat sources file format."""
+    urls = []
+    for line in content.split('\n'):
+        line = line.strip()
+        if line and not line.startswith('#'):
+            urls.append(line)
 
-        print(f"✅ Created {filepath} with default feeds")
-        return default_urls
+    print(f"📄 Loaded {len(urls)} URLs from {filepath} (flat format):")
+    for i, url in enumerate(urls[:3]):  # Show first 3
+        print(f"   {i}. {url}")
+    if len(urls) > 3:
+        print(f"   ... and {len(urls) - 3} more")
+    return urls
 
-    except Exception as e:
-        print(f"[Error reading file: {e}]")
-        sys.exit(1)
+
+def _parse_grouped_sources(content: str, filepath: str) -> List[str]:
+    """Parse grouped sources file format and flatten to URLs."""
+    lines = content.split('\n')
+    current_group = None
+    groups = {}
+    urls = []
+
+    for line in lines:
+        line = line.strip()
+        if not line or line.startswith('#'):
+            continue
+
+        if line.startswith('[') and line.endswith(']'):
+            # New group header
+            current_group = line[1:-1]  # Remove brackets
+            if current_group not in groups:
+                groups[current_group] = []
+        elif current_group:
+            # URL in current group
+            groups[current_group].append(line)
+            urls.append(line)
+
+    print(f"📄 Loaded {len(urls)} URLs from {filepath} (grouped format):")
+    for group_name, group_urls in groups.items():
+        print(f"   📁 {group_name}: {len(group_urls)} sources")
+        for i, url in enumerate(group_urls[:2]):  # Show first 2 per group
+            print(f"      {i+1}. {url}")
+        if len(group_urls) > 2:
+            print(f"      ... and {len(group_urls) - 2} more")
+
+    return urls
+
+
+def _create_default_sources_file(filepath: str) -> List[str]:
+    """Create default sources file and return URLs."""
+    default_content = """# News Sources Configuration
+# You can organize sources into groups that send to different output channels
+# Format: [group-name] followed by URLs
+
+[telegram-news]
+# General news sources for Telegram
+https://feeds.bbci.co.uk/news/rss.xml
+https://rss.cnn.com/rss/edition.rss
+https://feeds.npr.org/1001/rss.xml
+
+[discord-updates]
+# Technology and business news for Discord
+https://feeds.feedburner.com/TechCrunch/
+https://www.reddit.com/r/technology/.rss
+
+[all-channels]
+# Sources that go to all configured output channels
+# https://example.com/rss.xml
+"""
+
+    with open(filepath, "w") as f:
+        f.write(default_content)
+
+    print(f"✅ Created default sources file with grouped format: {filepath}")
+
+    # Return URLs from default content
+    return _parse_grouped_sources(default_content, filepath)
 
 def generate_world_overview(summarizer: Summarizer, summaries: Dict, prompt: str, max_summaries: int = 50) -> str:
     """
@@ -2601,9 +2800,12 @@ if __name__ == "__main__":
     error_tracking = load_error_tracking_from_db()
 
     urls = []
+    source_groups = {}
 
     if args.file:
         urls.extend(read_urls_from_file(args.file))
+        # Parse groups for channel routing
+        source_groups = parse_source_groups(args.file)
     if args.url:
         urls.append(args.url)
 
@@ -2651,11 +2853,29 @@ if __name__ == "__main__":
         print("Error: You must provide either --url or --file.")
         sys.exit(1)
 
-    # Process mixed sources with automatic type detection
-    print("🔍 Processing mixed sources (RSS feeds and websites)...")
+    # Process sources by group with appropriate output channels
+    print("🔍 Processing sources with channel routing...")
     rss_count = 0
     website_count = 0
     skipped_sources = 0
+
+    # Create a mapping of URL to its output channels
+    url_channel_map = {}
+
+    # If using grouped format, build channel mapping
+    if source_groups:
+        for group in source_groups.values():
+            for url in group.urls:
+                if group.output_channels:
+                    # Group specifies specific channels
+                    url_channel_map[url] = group.output_channels
+                else:
+                    # Empty channel list means all channels
+                    url_channel_map[url] = None
+    else:
+        # Flat format - all URLs go to all channels
+        for url in urls:
+            url_channel_map[url] = None
 
     for url in urls:
         # Check if source should be excluded due to excessive failures
@@ -2664,17 +2884,25 @@ if __name__ == "__main__":
             skipped_sources += 1
             continue
 
+        # Get appropriate output channels for this URL
+        channel_names = url_channel_map.get(url)
+        specific_channels = config.get_output_channels(channel_names)
+
         source_type = detect_source_type(url)
 
         if args.scrape or source_type == "website":
             print(f"🌐 Scraping website: {url}")
+            if channel_names:
+                print(f"   📤 Channels: {', '.join(channel_names)}")
             article_prompt = settings.get("prompts", {}).get("article_summary", "Summarize this article briefly:")
-            process_website(url, summarizer, content_extractor, summaries, output_channels, article_prompt, args.timeout)
+            process_website(url, summarizer, content_extractor, summaries, specific_channels, article_prompt, args.timeout)
             website_count += 1
         else:  # RSS feed
             print(f"📡 Processing RSS feed: {url}")
+            if channel_names:
+                print(f"   📤 Channels: {', '.join(channel_names)}")
             article_prompt = settings.get("prompts", {}).get("article_summary", "Summarize this article briefly:")
-            summarize_rss_feed(url, summarizer, summaries, content_extractor, article_prompt, args.timeout)
+            summarize_rss_feed(url, summarizer, summaries, content_extractor, article_prompt, args.timeout, specific_channels)
             rss_count += 1
 
     # Report final statistics
@@ -2734,7 +2962,7 @@ if __name__ == "__main__":
                     else:  # RSS feed
                         print(f"📡 Processing RSS feed: {url}")
                         article_prompt = settings.get("prompts", {}).get("article_summary", "Summarize this article briefly:")
-                        summarize_rss_feed(url, summarizer, summaries, content_extractor, article_prompt, args.timeout)
+                        summarize_rss_feed(url, summarizer, summaries, content_extractor, article_prompt, args.timeout, output_channels)
                         rss_count += 1
 
                 # Generate overview if requested

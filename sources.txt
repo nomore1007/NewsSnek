@@ -1,14 +1,26 @@
-# Add your RSS feeds and websites here
-# RSS feeds (automatically detected)
+# News Sources Configuration
+# You can organize sources into groups that send to different output channels
+# Format: [group-name] or [group-name:channel1,channel2]
+
+[telegram-news]
+# General news sources for Telegram
 https://feeds.bbci.co.uk/news/rss.xml
 https://rss.cnn.com/rss/edition.rss
 https://feeds.npr.org/1001/rss.xml
+
+[discord-updates]
+# Technology and business news for Discord
+https://feeds.feedburner.com/TechCrunch/
+https://www.reddit.com/r/technology/.rss
+
+[all-channels]
+# Sources that go to all configured channels
 https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml
 
-# YouTube RSS feeds
+# YouTube RSS feeds (all channels)
 https://www.youtube.com/feeds/videos.xml?channel_id=UCupvZG-5ko_eiXAupbDfxWw
 https://www.youtube.com/feeds/videos.xml?channel_id=UC16niRr50-MSBwiO3YDb3RA
 
-# Websites for scraping (automatically detected)
+# Websites for scraping (all channels)
 # https://example.com/news
 # https://www.theguardian.com/world/rss

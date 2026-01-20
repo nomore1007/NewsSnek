@@ -70,6 +70,74 @@ A sophisticated Python-based RSS feed reader and web scraper that summarizes art
 - **Telegram**: Send summaries to Telegram chats
 - **Discord**: Post embeds to Discord webhooks
 
+### Source Groups and Channel Routing
+
+You can organize your news sources into groups that send to different output channels:
+
+#### Grouped Sources Format
+
+```txt
+# News Sources Configuration
+# Format: [group-name] or [group-name:channel1,channel2]
+
+[telegram-news]
+# General news sources for Telegram
+https://feeds.bbci.co.uk/news/rss.xml
+https://rss.cnn.com/rss/edition.rss
+
+[discord-tech]
+# Technology news for Discord
+https://feeds.feedburner.com/TechCrunch/
+https://www.reddit.com/r/technology/.rss
+
+[all-channels]
+# Sources that go to all configured channels
+https://example.com/rss.xml
+```
+
+#### Named Output Channels
+
+Update your `settings.json` to use named channels:
+
+```json
+{
+  "output": {
+    "channels": {
+      "telegram": {
+        "type": "telegram",
+        "config": {
+          "bot_token": "your-bot-token",
+          "chat_id": "your-chat-id"
+        }
+      },
+      "discord": {
+        "type": "discord",
+        "config": {
+          "webhook_url": "https://discord.com/api/webhooks/...",
+          "username": "Tech Bot"
+        }
+      }
+    }
+  }
+}
+```
+
+#### Group-Channel Mapping
+
+- `[group-name]` - Sends to all configured channels
+- `[group-name:channel1,channel2]` - Sends only to specified channels
+- Empty groups use all channels by default
+
+#### Backward Compatibility
+
+The old flat format still works - all sources go to all channels:
+
+```txt
+# Traditional format (goes to all channels)
+https://feeds.bbci.co.uk/news/rss.xml
+https://rss.cnn.com/rss/edition.rss
+```
+
 ## Deployment
 
 ### Docker Deployment (Portainer)
