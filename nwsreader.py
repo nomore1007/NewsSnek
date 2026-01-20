@@ -308,68 +308,31 @@ class NewsReaderConfig:
 
     def _load_settings(self):
         """Load settings from JSON file with defaults."""
-        # Check for settings in /opt/config first (mounted volume), then current directory
-        config_paths = [
-            "/opt/config/settings.json",  # Mounted volume location
-            self.settings_file            # Default location
-        ]
-
-        settings_found = False
-        for settings_path in config_paths:
-            if os.path.exists(settings_path):
-                self.settings_file = settings_path
-                settings_found = True
-                break
+        # Check for settings in current directory (which may be mounted)
+        if os.path.exists(self.settings_file):
+            try:
+                with open(self.settings_file, 'r') as f:
+                    self.settings = json.load(f)
+                return
+            except json.JSONDecodeError:
+                print(f"Warning: Invalid JSON in {self.settings_file}, will recreate from example")
 
         # Create settings.json from example if it doesn't exist
-        if not settings_found:
-            # Try to find example file in multiple locations
-            example_paths = [
-                "/opt/config/settings.example.json",
-                "settings.example.json"
-            ]
-
-            example_file = None
-            for ex_path in example_paths:
-                if os.path.exists(ex_path):
-                    example_file = ex_path
-                    break
-
-            if example_file:
-                # Copy example file to working file
-                import shutil
-                shutil.copy2(example_file, self.settings_file)
-                print(f"Created {self.settings_file} from {example_file}")
-            else:
-                # Create from defaults if no example exists
+        example_file = "settings.example.json"
+        if os.path.exists(example_file):
+            # Copy example file to working file
+            import shutil
+            shutil.copy2(example_file, self.settings_file)
+            print(f"Created {self.settings_file} from {example_file}")
+            try:
+                with open(self.settings_file, 'r') as f:
+                    self.settings = json.load(f)
+            except json.JSONDecodeError:
+                # If copy resulted in invalid JSON, use defaults
                 self.settings = self._get_defaults()
                 self._save_settings()
-                return
-
-        # Load existing settings file
-        try:
-            with open(self.settings_file, 'r') as f:
-                self.settings = json.load(f)
-        except json.JSONDecodeError:
-            # If file exists but is invalid JSON, recreate from example
-            example_file = self.settings_file.replace('.json', '.example.json')
-            if os.path.exists(example_file):
-                import shutil
-                shutil.copy2(example_file, self.settings_file)
-                print(f"Recreated {self.settings_file} from {example_file} (invalid JSON)")
-                try:
-                    with open(self.settings_file, 'r') as f:
-                        self.settings = json.load(f)
-                except json.JSONDecodeError:
-                    # If example is also invalid, use defaults
-                    self.settings = self._get_defaults()
-                    self._save_settings()
-            else:
-                self.settings = self._get_defaults()
-                self._save_settings()
-        except Exception as e:
-            print(f"Warning: Error loading settings file: {e}")
-            # Use defaults as fallback
+        else:
+            # Create from defaults if no example exists
             self.settings = self._get_defaults()
             self._save_settings()
 
@@ -377,54 +340,27 @@ class NewsReaderConfig:
         """Ensure sources.txt exists, creating from example if needed."""
         sources_file = self.settings.get("files", {}).get("sources", "sources.txt")
 
-        # Check multiple possible locations for the sources file
-        sources_paths = [
-            "/opt/newssnek/sources.txt",  # Host mount location
-            "/opt/config/sources.txt",   # Container mount location
-            sources_file                 # Configured location
-        ]
+        if os.path.exists(sources_file):
+            return  # File already exists
 
-        sources_found = False
-        for src_path in sources_paths:
-            if os.path.exists(src_path):
-                # Update settings to point to the found file
-                self.settings["files"]["sources"] = src_path
-                sources_found = True
-                print(f"Found sources file at: {src_path}")
-                break
-
-        if not sources_found:
-            print("No sources file found, creating from example...")
-
-            # Try to find example file in multiple locations
-            example_paths = [
-                "/opt/newssnek/sources.example.txt",
-                "/opt/config/sources.example.txt",
-                "sources.example.txt",
-                "/app/sources.example.txt"
-            ]
-
-            example_file = None
-            for ex_path in example_paths:
-                if os.path.exists(ex_path):
-                    example_file = ex_path
-                    break
-
-            if example_file:
-                # Copy example file to working file
-                import shutil
-                shutil.copy2(example_file, sources_file)
-                print(f"✅ Created {sources_file} from {example_file}")
-            else:
-                # Create default sources file
-                with open(sources_file, 'w') as f:
-                    f.write("# Add your RSS feeds and websites here\n")
-                    f.write("# RSS feeds (automatically detected)\n")
-                    f.write("# https://example.com/feed.xml\n")
-                    f.write("\n")
-                    f.write("# Websites for scraping (automatically detected)\n")
-                    f.write("# https://example.com/news\n")
-                print(f"✅ Created default {sources_file}")
+        # Create sources.txt from example
+        example_file = "sources.example.txt"
+        if os.path.exists(example_file):
+            # Copy example file to working file
+            import shutil
+            shutil.copy2(example_file, sources_file)
+            print(f"✅ Created {sources_file} from {example_file}")
+        else:
+            # Create default sources file
+            with open(sources_file, 'w') as f:
+                f.write("# Add your RSS feeds and websites here\n")
+                f.write("# RSS feeds (automatically detected)\n")
+                f.write("https://feeds.bbci.co.uk/news/rss.xml\n")
+                f.write("https://rss.cnn.com/rss/edition.rss\n")
+                f.write("\n")
+                f.write("# Websites for scraping (automatically detected)\n")
+                f.write("# https://example.com/news\n")
+            print(f"✅ Created default {sources_file} with sample feeds")
 
     def _get_defaults(self) -> Dict:
         """Get default settings."""

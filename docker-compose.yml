@@ -6,10 +6,9 @@ services:
       pull: true
     container_name: news-reader
     volumes:
-      - /opt/newssnek/data:/app/data
-      - /opt/newssnek:/opt/config
+      - /opt/newssnek:/app
     environment:
       - INTERVAL=${INTERVAL}
       - PYTHONPATH=/app
     restart: unless-stopped
-    command: ["python3", "nwsreader.py", "--file", "/opt/config/sources.txt", "--overview", "--interval", "60"]
+    command: ["python3", "nwsreader.py", "--file", "sources.txt", "--overview", "--interval", "60"]

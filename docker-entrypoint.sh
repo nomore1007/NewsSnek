@@ -16,14 +16,14 @@ ls -la /opt/newssnek/ || echo "Cannot list /opt/newssnek"
 echo "Contents of /app (example files):"
 ls -la /app/ | grep -E "(settings|sources)" || echo "No example files found in /app"
 
-# Copy example files to the HOST directory (which is mounted to /opt/config)
-# This ensures files are created on the host and visible to the container
+# Copy example files to the normal container location (which is mounted to host)
+# This ensures files are created in /app and visible on host through volume mount
 echo "Creating configuration files..."
 
 if [ -f "/app/settings.example.json" ]; then
-    cp "/app/settings.example.json" "/opt/newssnek/settings.json"
-    if [ -f "/opt/newssnek/settings.json" ]; then
-        echo "✅ Successfully created settings.json on host (/opt/newssnek/)"
+    cp "/app/settings.example.json" "/app/settings.json"
+    if [ -f "/app/settings.json" ]; then
+        echo "✅ Successfully created settings.json in /app/"
     else
         echo "❌ Failed to create settings.json - file not found after copy"
     fi
@@ -32,9 +32,9 @@ else
 fi
 
 if [ -f "/app/sources.example.txt" ]; then
-    cp "/app/sources.example.txt" "/opt/newssnek/sources.txt"
-    if [ -f "/opt/newssnek/sources.txt" ]; then
-        echo "✅ Successfully created sources.txt on host (/opt/newssnek/)"
+    cp "/app/sources.example.txt" "/app/sources.txt"
+    if [ -f "/app/sources.txt" ]; then
+        echo "✅ Successfully created sources.txt in /app/"
     else
         echo "❌ Failed to create sources.txt - file not found after copy"
     fi
@@ -42,12 +42,9 @@ else
     echo "❌ ERROR: sources.example.txt not found in /app/"
 fi
 
-# Verify files exist in both locations
-echo "Files in /opt/newssnek (host):"
-ls -la /opt/newssnek/ || echo "Cannot list /opt/newssnek"
-
-echo "Files in /opt/config (container mount):"
-ls -la /opt/config/ || echo "Cannot list /opt/config"
+# Verify files exist
+echo "Files in /app:"
+ls -la /app/ | grep -E "(settings|sources)" || echo "Config files not found in /app"
 
 echo "Entrypoint: Configuration files ready"
 
