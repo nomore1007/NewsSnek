@@ -18,11 +18,18 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY . .
 
+# Debug: Show all files copied to /app
+RUN echo "=== Files in /app after COPY ===" && ls -la /app/ && echo "=== End files list ==="
+
+# Explicitly ensure docker-entrypoint.sh is copied and executable
+RUN echo "=== Checking docker-entrypoint.sh ===" && \
+    ls -la /app/docker-entrypoint.sh && \
+    chmod +x /app/docker-entrypoint.sh && \
+    ls -la /app/docker-entrypoint.sh && \
+    echo "=== Entrypoint script ready ==="
+
 # Create data directory for persistent storage
 RUN mkdir -p /app/data
-
-# Ensure entrypoint script exists and is executable
-RUN ls -la /app/docker-entrypoint.sh && chmod +x /app/docker-entrypoint.sh && ls -la /app/docker-entrypoint.sh
 
 # Note: Config files are created by entrypoint script to work with volume mounts
 
