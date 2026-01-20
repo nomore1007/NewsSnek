@@ -7,23 +7,15 @@ set -e
 
 echo "=== NewsSnek Entrypoint v$(cat /app/VERSION 2>/dev/null | grep VERSION | cut -d'=' -f2 || echo 'unknown') ==="
 
-# Ensure data directory exists
-echo "Ensuring persistent configuration files exist..."
+# Ensure data directory exists and has correct permissions
 mkdir -p /app/data
 
-# Fix data directory permissions if it's a volume mount
-if [ -d "/app/data" ]; then
-    echo "Checking /app/data directory permissions..."
-    # Check if we can write to the data directory
-    if ! touch /app/data/.test_write 2>/dev/null; then
-        echo "⚠️  Cannot write to /app/data - fixing permissions..."
-        chown -R 1000:1000 /app/data
-        chmod -R 755 /app/data
-        echo "✅ Fixed /app/data permissions"
-    else
-        rm -f /app/data/.test_write
-        echo "✅ /app/data is writable"
-    fi
+# Fix data directory permissions if needed (only show if there's an issue)
+if [ -d "/app/data" ] && ! touch /app/data/.test_write 2>/dev/null; then
+    echo "⚠️  Fixing /app/data permissions..."
+    chown -R 1000:1000 /app/data
+    chmod -R 755 /app/data
+    rm -f /app/data/.test_write
 fi
 
 # Default settings.json content
@@ -92,37 +84,25 @@ https://www.youtube.com/feeds/videos.xml?channel_id=UC16niRr50-MSBwiO3YDb3RA
 # Websites for scraping (automatically detected)
 # https://example.com/news'
 
-# Create configuration files in /app/data (persistent volume)
+# Create or use existing configuration files
 if [ ! -f "/app/data/settings.json" ]; then
-    echo "✅ Created default settings.json in data directory"
+    echo "📝 Creating default settings.json..."
     echo "$DEFAULT_SETTINGS" > /app/data/settings.json
     chown 1000:1000 /app/data/settings.json
-else
-    echo "✅ Using existing settings.json from data directory"
 fi
 
 if [ ! -f "/app/data/sources.txt" ]; then
-    echo "✅ Created default sources.txt in data directory"
+    echo "📝 Creating default sources.txt..."
     echo "$DEFAULT_SOURCES" > /app/data/sources.txt
     chown 1000:1000 /app/data/sources.txt
-else
-    echo "✅ Using existing sources.txt from data directory"
 fi
 
-# Copy to /app for runtime use (ensures app user can access)
+# Copy to runtime location
 cp /app/data/settings.json /app/settings.json
 cp /app/data/sources.txt /app/sources.txt
 chown 1000:1000 /app/settings.json /app/sources.txt
 
-# Verify configuration
-echo "=== Configuration Complete ==="
-echo "Persistent config files in /app/data:"
-ls -la /app/data/ | grep -E "(settings|sources)" || echo "Config files not found in data directory"
-
-echo "Runtime config files in /app:"
-ls -la /app/ | grep -E "(settings|sources)" || echo "Config files not found in app directory"
-
-echo "🎯 NewsSnek is ready to run!"
+echo "✅ Configuration ready - NewsSnek is starting..."
 
 # Execute command (already running with appropriate permissions)
 exec "$@"
