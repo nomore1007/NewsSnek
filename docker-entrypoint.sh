@@ -11,17 +11,13 @@ echo "=== NewsSnek Entrypoint v$(cat /app/VERSION 2>/dev/null | grep VERSION | c
 echo "Ensuring persistent configuration files exist..."
 mkdir -p /app/data
 
-# Get app user UID/GID
-APP_UID=$(id -u app)
-APP_GID=$(id -g app)
-
 # Fix data directory permissions if it's a volume mount
 if [ -d "/app/data" ]; then
     echo "Checking /app/data directory permissions..."
     # Check if we can write to the data directory
     if ! touch /app/data/.test_write 2>/dev/null; then
         echo "⚠️  Cannot write to /app/data - fixing permissions..."
-        chown -R ${APP_UID}:${APP_GID} /app/data
+        chown -R 1000:1000 /app/data
         chmod -R 755 /app/data
         echo "✅ Fixed /app/data permissions"
     else
@@ -100,7 +96,7 @@ https://www.youtube.com/feeds/videos.xml?channel_id=UC16niRr50-MSBwiO3YDb3RA
 if [ ! -f "/app/data/settings.json" ]; then
     echo "✅ Created default settings.json in data directory"
     echo "$DEFAULT_SETTINGS" > /app/data/settings.json
-    chown ${APP_UID}:${APP_GID} /app/data/settings.json
+    chown 1000:1000 /app/data/settings.json
 else
     echo "✅ Using existing settings.json from data directory"
 fi
@@ -108,7 +104,7 @@ fi
 if [ ! -f "/app/data/sources.txt" ]; then
     echo "✅ Created default sources.txt in data directory"
     echo "$DEFAULT_SOURCES" > /app/data/sources.txt
-    chown ${APP_UID}:${APP_GID} /app/data/sources.txt
+    chown 1000:1000 /app/data/sources.txt
 else
     echo "✅ Using existing sources.txt from data directory"
 fi
@@ -116,6 +112,7 @@ fi
 # Copy to /app for runtime use (ensures app user can access)
 cp /app/data/settings.json /app/settings.json
 cp /app/data/sources.txt /app/sources.txt
+chown 1000:1000 /app/settings.json /app/sources.txt
 
 # Verify configuration
 echo "=== Configuration Complete ==="
@@ -127,5 +124,5 @@ ls -la /app/ | grep -E "(settings|sources)" || echo "Config files not found in a
 
 echo "🎯 NewsSnek is ready to run!"
 
-# Switch to app user and execute command
-exec sudo -u app "$@"
+# Execute command (already running with appropriate permissions)
+exec "$@"
