@@ -4,14 +4,11 @@
 # Config files are created during Docker build, this script handles user overrides
 
 echo "=== NewsSnek Entrypoint v$(cat /app/VERSION 2>/dev/null | grep VERSION | cut -d'=' -f2 || echo 'unknown') ==="
-echo "Ensuring persistent configuration files exist..."
+echo "Setting up configuration files..."
 
-# Ensure data directory exists
-mkdir -p /app/data
-
-# Ensure config files exist in persistent data directory
-if [ ! -f "/app/data/settings.json" ]; then
-    cat > "/app/data/settings.json" << 'EOF'
+# First, ensure config files exist in /app (always writable by app user)
+if [ ! -f "/app/settings.json" ]; then
+    cat > "/app/settings.json" << 'EOF'
 {
   "summarizer": {
     "provider": "ollama",
@@ -62,13 +59,11 @@ if [ ! -f "/app/data/settings.json" ]; then
   "interval": 60
 }
 EOF
-    echo "✅ Created default settings.json in data directory"
-else
-    echo "✅ Using existing settings.json from data directory"
+    echo "✅ Created default settings.json"
 fi
 
-if [ ! -f "/app/data/sources.txt" ]; then
-    cat > "/app/data/sources.txt" << 'EOF'
+if [ ! -f "/app/sources.txt" ]; then
+    cat > "/app/sources.txt" << 'EOF'
 # Add your RSS feeds and websites here
 # RSS feeds (automatically detected)
 https://feeds.bbci.co.uk/news/rss.xml
@@ -83,22 +78,33 @@ https://www.youtube.com/feeds/videos.xml?channel_id=UC16niRr50-MSBwiO3YDb3RA
 # Websites for scraping (automatically detected)
 # https://example.com/news
 EOF
-    echo "✅ Created default sources.txt in data directory"
-else
-    echo "✅ Using existing sources.txt from data directory"
+    echo "✅ Created default sources.txt"
 fi
 
-# Copy config files to /app for application use
-cp "/app/data/settings.json" "/app/settings.json"
-cp "/app/data/sources.txt" "/app/sources.txt"
+# Try to create persistent copies in data directory if writable
+echo "Attempting to create persistent config files..."
+mkdir -p /app/data 2>/dev/null || echo "⚠️  Cannot create data directory"
+
+if [ -w "/app/data" ] 2>/dev/null; then
+    cp "/app/settings.json" "/app/data/settings.json" 2>/dev/null && echo "✅ Created persistent settings.json" || echo "⚠️  Could not create persistent settings.json"
+    cp "/app/sources.txt" "/app/data/sources.txt" 2>/dev/null && echo "✅ Created persistent sources.txt" || echo "⚠️  Could not create persistent sources.txt"
+else
+    echo "⚠️  Data directory not writable - config files will not persist between container restarts"
+fi
 
 # Verify files exist and show version info
 echo "=== Configuration Complete ==="
-echo "Persistent config files in /app/data:"
-ls -la /app/data/ | grep -E "(settings|sources)" || echo "Config files not found in data directory"
-
 echo "Runtime config files in /app:"
 ls -la /app/ | grep -E "(settings|sources)" || echo "Config files not found in app directory"
+
+echo "Checking persistence status..."
+if [ -d "/app/data" ] && [ -w "/app/data" ]; then
+    echo "Persistent config files in /app/data:"
+    ls -la /app/data/ | grep -E "(settings|sources)" || echo "No persistent config files found"
+    echo "✅ Config files will persist between container restarts"
+else
+    echo "⚠️  Config files will NOT persist - check volume mount permissions"
+fi
 
 echo "🎯 NewsSnek is ready to run!"
 exec "$@"
