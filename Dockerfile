@@ -6,7 +6,6 @@ WORKDIR /app
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
-    gcc \
     su-exec \
     && rm -rf /var/lib/apt/lists/*
 
