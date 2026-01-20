@@ -377,10 +377,11 @@ class NewsReaderConfig:
         """Ensure sources.txt exists, creating from example if needed."""
         sources_file = self.settings.get("files", {}).get("sources", "sources.txt")
 
-        # Check if sources file exists in mounted location or current directory
+        # Check multiple possible locations for the sources file
         sources_paths = [
-            "/opt/config/sources.txt",  # Mounted volume location
-            sources_file                # Configured location
+            "/opt/newssnek/sources.txt",  # Host mount location
+            "/opt/config/sources.txt",   # Container mount location
+            sources_file                 # Configured location
         ]
 
         sources_found = False
@@ -389,13 +390,18 @@ class NewsReaderConfig:
                 # Update settings to point to the found file
                 self.settings["files"]["sources"] = src_path
                 sources_found = True
+                print(f"Found sources file at: {src_path}")
                 break
 
         if not sources_found:
+            print("No sources file found, creating from example...")
+
             # Try to find example file in multiple locations
             example_paths = [
+                "/opt/newssnek/sources.example.txt",
                 "/opt/config/sources.example.txt",
-                "sources.example.txt"
+                "sources.example.txt",
+                "/app/sources.example.txt"
             ]
 
             example_file = None
@@ -408,7 +414,7 @@ class NewsReaderConfig:
                 # Copy example file to working file
                 import shutil
                 shutil.copy2(example_file, sources_file)
-                print(f"Created {sources_file} from {example_file}")
+                print(f"✅ Created {sources_file} from {example_file}")
             else:
                 # Create default sources file
                 with open(sources_file, 'w') as f:
@@ -418,7 +424,7 @@ class NewsReaderConfig:
                     f.write("\n")
                     f.write("# Websites for scraping (automatically detected)\n")
                     f.write("# https://example.com/news\n")
-                print(f"Created default {sources_file}")
+                print(f"✅ Created default {sources_file}")
 
     def _get_defaults(self) -> Dict:
         """Get default settings."""
@@ -1832,11 +1838,29 @@ def read_urls_from_file(filepath: str) -> List[str]:
                 if line and not line.startswith('#'):
                     urls.append(line)
             print(f"📄 Loaded {len(urls)} URLs from {filepath}:")
-            for i, url in enumerate(urls[:3], 1):  # Show first 3
+            for i, url in enumerate(urls[:3]):  # Show first 3
                 print(f"   {i}. {url}")
             if len(urls) > 3:
                 print(f"   ... and {len(urls) - 3} more")
             return urls
+    except FileNotFoundError:
+        print(f"⚠️ Sources file not found: {filepath}")
+        print("Creating default sources file...")
+
+        # Create default sources file
+        default_urls = [
+            "https://feeds.bbci.co.uk/news/rss.xml",
+            "https://rss.cnn.com/rss/edition.rss"
+        ]
+
+        with open(filepath, "w") as f:
+            f.write("# Default RSS feeds\n")
+            for url in default_urls:
+                f.write(f"{url}\n")
+
+        print(f"✅ Created {filepath} with default feeds")
+        return default_urls
+
     except Exception as e:
         print(f"[Error reading file: {e}]")
         sys.exit(1)
