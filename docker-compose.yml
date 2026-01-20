@@ -6,7 +6,8 @@ services:
       pull: true
     container_name: news-reader
     volumes:
-      - ./data:/app/data
+      - /opt/newssnek:/app/data
+      - /opt/newssnek:/opt/config
     environment:
       - INTERVAL=${INTERVAL}
       - PYTHONPATH=/app
