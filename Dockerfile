@@ -24,15 +24,7 @@ RUN chmod +x docker-entrypoint.sh
 # Create data directory for persistent storage
 RUN mkdir -p /app/data
 
-# Create default config files from examples (before user switch)
-RUN if [ -f "/app/settings.example.json" ]; then \
-        cp "/app/settings.example.json" "/app/settings.json" && \
-        echo "Created settings.json during build"; \
-    fi
-RUN if [ -f "/app/sources.example.txt" ]; then \
-        cp "/app/sources.example.txt" "/app/sources.txt" && \
-        echo "Created sources.txt during build"; \
-    fi
+# Note: Config files are created by entrypoint script to ensure they exist
 
 # Set environment variables
 ENV PYTHONPATH=/app
