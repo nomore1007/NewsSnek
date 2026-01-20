@@ -1741,6 +1741,10 @@ def summarize_rss_feed(rss_url: str, summarizer: Summarizer, summaries: Dict, co
         print(f"Found {len(feed.entries)} entries\n")
 
         if len(feed.entries) == 0:
+            print("⚠️ No entries found in RSS feed - feed might be empty or unreachable")
+            return
+
+        if len(feed.entries) == 0:
             raise Exception("RSS feed contains no entries")
 
         # Initialize feed entry in summaries if not exists
@@ -1772,12 +1776,13 @@ def summarize_rss_feed(rss_url: str, summarizer: Summarizer, summaries: Dict, co
             if not summary_input or len(summary_input.strip()) < 100:
                 if link:
                     print(f"📖 RSS content insufficient, fetching full article...")
+                    print(f"   Article URL: {link}")
                     full_content = get_full_article_content(str(link), timeout)
                     if not full_content.startswith("[Error") and not full_content.startswith("[Could not"):
                         summary_input = full_content
                         print(f"✅ Retrieved full article content ({len(summary_input)} chars)")
                     else:
-                        print(f"⚠️ Could not retrieve full content: {full_content}")
+                        print(f"⚠️ Could not retrieve full content: {full_content[:100]}...")
 
             if not summary_input:
                 print("No content to summarize.\n")
@@ -1819,21 +1824,6 @@ def summarize_rss_feed(rss_url: str, summarizer: Summarizer, summaries: Dict, co
         save_error_tracking_to_db(error_tracking)
 
 def read_urls_from_file(filepath: str) -> List[str]:
-    """
-    Read RSS feed and website URLs from a text file.
-
-    Parses the file line by line, skipping comments (lines starting with #)
-    and empty lines.
-
-    Args:
-        filepath: Path to the file containing URLs
-
-    Returns:
-        List of URLs to process
-
-    Raises:
-        SystemExit: If file cannot be read
-    """
     try:
         with open(filepath, "r") as f:
             urls = []
@@ -1841,6 +1831,11 @@ def read_urls_from_file(filepath: str) -> List[str]:
                 line = line.strip()
                 if line and not line.startswith('#'):
                     urls.append(line)
+            print(f"📄 Loaded {len(urls)} URLs from {filepath}:")
+            for i, url in enumerate(urls[:3], 1):  # Show first 3
+                print(f"   {i}. {url}")
+            if len(urls) > 3:
+                print(f"   ... and {len(urls) - 3} more")
             return urls
     except Exception as e:
         print(f"[Error reading file: {e}]")
@@ -2541,11 +2536,13 @@ def process_single_article(url: str, title: str, content: str, summarizer: Summa
 
     summary_result = summarizer.summarize(content, prompt)
 
-    # Check if summarization was successful
-    if not summary_result.success:
-        print(f"❌ Summarization failed: {summary_result.error}")
-        print("⏭️ Skipping article - not marking as complete\n")
-        return
+            # Check if summarization was successful
+            if not summary_result.success:
+                print(f"❌ Summarization failed: {summary_result.error}")
+                print(f"   Article title: {title}")
+                print(f"   Content length: {len(content)} chars")
+                print("⏭️ Skipping article - not marking as complete\n")
+                return
 
     summary = summary_result.content
 
