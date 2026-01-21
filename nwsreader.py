@@ -261,8 +261,28 @@ class OllamaSummarizer(Summarizer):
                     translated=translated
                 )
 
+        except requests.exceptions.ConnectionError as e:
+            error_msg = f"❌ Cannot connect to Ollama server at {self.host}:11434. Please ensure Ollama is running."
+            print(error_msg)
+            return SummarizerResult(success=False, error=error_msg)
+        except requests.exceptions.Timeout as e:
+            error_msg = f"⏰ Timeout connecting to Ollama server at {self.host}:11434 (timeout: {self.timeout}s)"
+            print(error_msg)
+            return SummarizerResult(success=False, error=error_msg)
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code == 404:
+                error_msg = f"❌ Model '{self.model}' not found on Ollama server. Please ensure the model is installed."
+                print(error_msg)
+                print(f"💡 Available models can be listed with: ollama list")
+                print(f"💡 Install the model with: ollama pull {self.model}")
+            else:
+                error_msg = f"❌ HTTP error from Ollama server: {e.response.status_code} - {e.response.reason}"
+                print(error_msg)
+            return SummarizerResult(success=False, error=error_msg)
         except Exception as e:
-            return SummarizerResult(success=False, error=f"Ollama summarization failed: {e}")
+            error_msg = f"❌ Ollama summarization failed: {e}"
+            print(error_msg)
+            return SummarizerResult(success=False, error=error_msg)
 
 
 class SummarizerFactory:
@@ -2033,10 +2053,18 @@ def summarize_rss_feed(rss_url: str, summarizer: Summarizer, summaries: Dict, co
         save_error_tracking_to_db(error_tracking)
 
 def read_urls_from_file(filepath: str) -> List[str]:
-    """Read URLs from file, supporting both flat format and grouped format."""
+    """Read URLs from file, supporting flat format, grouped format, and JSON format."""
     try:
         with open(filepath, "r") as f:
             content = f.read()
+
+        # Try to parse as JSON first
+        try:
+            data = json.loads(content)
+            if "groups" in data:
+                return _parse_json_sources(data, filepath)
+        except json.JSONDecodeError:
+            pass  # Not JSON, continue with text parsing
 
         # Check if file uses grouped format (has section headers)
         if '[' in content and ']' in content:
@@ -2048,6 +2076,27 @@ def read_urls_from_file(filepath: str) -> List[str]:
         print(f"⚠️ Sources file not found: {filepath}")
         print("Creating default sources file...")
         return _create_default_sources_file(filepath)
+
+
+def _parse_json_sources(data: Dict, filepath: str) -> List[str]:
+    """Parse JSON sources file format and flatten to URLs."""
+    urls = []
+    groups = data.get("groups", {})
+
+    for group_name, group_data in groups.items():
+        group_urls = group_data.get("sources", [])
+        urls.extend(group_urls)
+
+    print(f"📄 Loaded {len(urls)} URLs from {filepath} (JSON format):")
+    for group_name, group_data in groups.items():
+        group_urls = group_data.get("sources", [])
+        print(f"   📁 {group_name}: {len(group_urls)} sources")
+        for i, url in enumerate(group_urls[:2]):  # Show first 2 per group
+            print(f"      {i+1}. {url}")
+        if len(group_urls) > 2:
+            print(f"      ... and {len(group_urls) - 2} more")
+
+    return urls
 
 
 def _parse_flat_sources(content: str, filepath: str) -> List[str]:
