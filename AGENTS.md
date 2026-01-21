@@ -10,7 +10,7 @@ This is a Python-based RSS feed reader and web scraper that summarizes articles 
 - `nwsreader.py`: Main application with modular architecture
 - `sources.json`: RSS feeds and website URLs (structured JSON format)
 - `sources.txt`: Legacy text format (still supported)
-- `settings.json`: Configuration file
+- `settings.json`: Configuration file (contains Ollama server address)
 - `requirements.txt`: Python dependencies
 
 ### Migration
@@ -18,6 +18,13 @@ To migrate from `sources.txt` to `sources.json` format:
 ```bash
 python3 migrate_sources.py
 ```
+
+### Error Handling
+The application provides clear error messages when Ollama is unavailable:
+- **Connection errors**: "Cannot connect to Ollama server at [host]:11434"
+- **Model not found**: "Model '[model]' not found" with installation instructions
+- **Timeout errors**: Clear timeout messages with duration
+- **Graceful degradation**: Articles are skipped but not marked complete for retry
 
 ## Code Style Guidelines
 

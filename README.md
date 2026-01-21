@@ -13,6 +13,7 @@ A sophisticated Python-based RSS feed reader and web scraper that summarizes art
 - **Continuous Monitoring**: Run in intervals for real-time news tracking
 - **Database Storage**: SQLite with migration support
 - **Home Assistant Integration**: Generate daily briefings
+- **Clear Error Messages**: Helpful error reporting when Ollama server is unavailable
 
 ## Recent Changes
 
