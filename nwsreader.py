@@ -2124,15 +2124,21 @@ def summarize_rss_feed(rss_url: str, summarizer: Summarizer, summaries: Dict, co
 def read_urls_from_file(filepath: str) -> List[str]:
     """Read URLs from file, supporting flat format, grouped format, and JSON format."""
     try:
+        print(f"📖 Reading sources from: {filepath}")
         with open(filepath, "r") as f:
             content = f.read()
+        
+        print(f"📄 File content preview (first 200 chars): {content[:200]}...")
 
         # Try to parse as JSON first
         try:
             data = json.loads(content)
             if "groups" in data:
+                print(f"🔍 Detected JSON format with groups")
                 return _parse_json_sources(data, filepath)
+            print(f"🔍 Detected JSON format without groups")
         except json.JSONDecodeError:
+            print(f"🔍 Not JSON format, trying text parsing...")
             pass  # Not JSON, continue with text parsing
 
         # Check if file uses grouped format (has section headers)
