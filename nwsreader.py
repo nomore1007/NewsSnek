@@ -328,10 +328,11 @@ class NewsReaderConfig:
 
     def _load_settings(self):
         """Load settings from JSON file with defaults."""
-        # Check for settings in multiple locations
+        # Check for settings in multiple locations, prioritize /app/data
         settings_paths = [
-            self.settings_file,  # Default location
-            "settings.json",     # Alternative location
+            "/app/data/settings.json",  # Priority 1: Mounted data directory
+            self.settings_file,          # Priority 2: Specified location
+            "settings.json",             # Priority 3: Current directory fallback
         ]
 
         for path in settings_paths:
@@ -3039,7 +3040,7 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="Summarize RSS feeds or scrape websites using a remote Ollama model.")
     parser.add_argument("--url", "-u", help="Single RSS feed URL or website URL")
-    parser.add_argument("--file", "-f", default=default_sources_file, help=f"File containing mixed source URLs (default: {default_sources_file})")
+    parser.add_argument("--file", "-f", default=f"/app/data/{default_sources_file}", help=f"File containing mixed source URLs (default: /app/data/{default_sources_file})")
     parser.add_argument("--scrape", "-s", action="store_true", help="Force all URLs to be treated as websites to scrape")
     parser.add_argument("--overview", action="store_true", help="Generate a consolidated overview of all summaries (state of the world)")
     parser.add_argument("--migrate", action="store_true", help="Migrate data from JSON files to SQLite database")
