@@ -329,12 +329,18 @@ class NewsReaderConfig:
         self._save_settings()
 
     def _ensure_sources_file(self):
-        """Ensure sources.txt exists, creating from example if needed."""
-        sources_file = self.settings.get("files", {}).get("sources", "sources.txt")
+        """Ensure sources file exists (JSON or text), creating from settings or example if needed."""
+        sources_file = self.settings.get("files", {}).get("sources", "sources.json")
+
+        # Check if sources are defined inline in settings
+        if "sources" in self.settings and "groups" in self.settings["sources"]:
+            print("✅ Using inline sources from settings.json")
+            return  # Sources defined inline
 
         sources_paths = [
             sources_file,        # Configured location
-            "sources.txt",       # Default location
+            "sources.json",      # JSON format
+            "sources.txt",       # Legacy text format
         ]
 
         for path in sources_paths:
@@ -343,8 +349,45 @@ class NewsReaderConfig:
                 self.settings["files"]["sources"] = path
                 return  # File found
 
-        # Create default sources file (entrypoint should have created this)
-        with open(sources_file, 'w') as f:
+        # Create default sources file (JSON format preferred)
+        if sources_file.endswith('.json'):
+            self._create_default_sources_json(sources_file)
+        else:
+            self._create_default_sources_text(sources_file)
+
+    def _create_default_sources_json(self, filepath: str):
+        """Create default sources file in JSON format."""
+        default_sources = {
+            "groups": {
+                "general-news": {
+                    "description": "General news sources for all channels",
+                    "channels": [],
+                    "prompt": None,
+                    "sources": [
+                        "https://feeds.bbci.co.uk/news/rss.xml",
+                        "https://rss.cnn.com/rss/edition.rss"
+                    ]
+                },
+                "tech-news": {
+                    "description": "Technology news for Discord",
+                    "channels": ["discord"],
+                    "prompt": None,
+                    "sources": [
+                        "https://feeds.feedburner.com/TechCrunch/",
+                        "https://www.reddit.com/r/technology/.rss"
+                    ]
+                }
+            }
+        }
+
+        with open(filepath, 'w', encoding='utf-8') as f:
+            json.dump(default_sources, f, indent=2, ensure_ascii=False)
+
+        print(f"✅ Created default {filepath} with sample grouped sources")
+
+    def _create_default_sources_text(self, filepath: str):
+        """Create default sources file in text format (legacy)."""
+        with open(filepath, 'w') as f:
             f.write("# Add your RSS feeds and websites here\n")
             f.write("# RSS feeds (automatically detected)\n")
             f.write("https://feeds.bbci.co.uk/news/rss.xml\n")
@@ -352,7 +395,7 @@ class NewsReaderConfig:
             f.write("\n")
             f.write("# Websites for scraping (automatically detected)\n")
             f.write("# https://example.com/news\n")
-        print(f"✅ Created default {sources_file} with sample feeds")
+        print(f"✅ Created default {filepath} with sample feeds")
 
     def _get_defaults(self) -> Dict:
         """Get default settings."""
@@ -979,27 +1022,42 @@ class TelegramOutputChannel(OutputChannel):
 
 
 class DiscordOutputChannel(OutputChannel):
-    """Discord webhook output channel."""
+    """Discord output channel supporting both webhooks and bot tokens."""
 
     def __init__(self, config: OutputChannelConfig):
         """
         Initialize Discord output channel.
 
         Args:
-            config: Must contain 'webhook_url' option
+            config: Must contain either 'webhook_url' or 'bot_token' + 'channel_id'
         """
         super().__init__(config)
         self.webhook_url = config.options.get('webhook_url')
+        self.bot_token = config.options.get('bot_token')
+        self.channel_id = config.options.get('channel_id')
         self.username = config.options.get('username', 'News Reader')
         self.avatar_url = config.options.get('avatar_url')
 
+        # Determine authentication method
+        if self.webhook_url:
+            self.auth_method = 'webhook'
+        elif self.bot_token and self.channel_id:
+            self.auth_method = 'bot'
+            self.api_url = f"https://discord.com/api/v10/channels/{self.channel_id}/messages"
+            self.headers = {
+                'Authorization': f'Bot {self.bot_token}',
+                'Content-Type': 'application/json'
+            }
+        else:
+            self.auth_method = None
+
     def is_available(self) -> bool:
-        """Check if Discord webhook is properly configured."""
-        return bool(self.webhook_url)
+        """Check if Discord is properly configured."""
+        return self.auth_method is not None
 
     def send_summary(self, title: str, summary: str, source: str = "", category: str = "") -> OutputChannelResult:
         """
-        Send summary to Discord webhook.
+        Send summary to Discord via webhook or bot token.
 
         Args:
             title: Article title
@@ -1011,7 +1069,7 @@ class DiscordOutputChannel(OutputChannel):
             OutputChannelResult with success status
         """
         if not self.is_available():
-            return OutputChannelResult(success=False, error="Discord webhook not configured")
+            return OutputChannelResult(success=False, error="Discord not properly configured")
 
         try:
             embed = {
@@ -1030,17 +1088,22 @@ class DiscordOutputChannel(OutputChannel):
                     "inline": True
                 }]
 
-            payload = {
-                "username": self.username,
-                "embeds": [embed]
-            }
+            if self.auth_method == 'webhook':
+                payload = {
+                    "username": self.username,
+                    "embeds": [embed]
+                }
+                if self.avatar_url:
+                    payload["avatar_url"] = self.avatar_url
+                response = requests.post(self.webhook_url, json=payload, timeout=30)
 
-            if self.avatar_url:
-                payload["avatar_url"] = self.avatar_url
+            elif self.auth_method == 'bot':
+                payload = {
+                    "embeds": [embed]
+                }
+                response = requests.post(self.api_url, json=payload, headers=self.headers, timeout=30)
 
-            response = requests.post(self.webhook_url, json=payload, timeout=30)
             response.raise_for_status()
-
             return OutputChannelResult(success=True, message="Summary sent to Discord")
 
         except Exception as e:
@@ -1082,17 +1145,22 @@ class DiscordOutputChannel(OutputChannel):
                     "color": 0x2ecc71
                 }]
 
-            payload = {
-                "username": self.username,
-                "embeds": embeds
-            }
+            if self.auth_method == 'webhook':
+                payload = {
+                    "username": self.username,
+                    "embeds": embeds
+                }
+                if self.avatar_url:
+                    payload["avatar_url"] = self.avatar_url
+                response = requests.post(self.webhook_url, json=payload, timeout=30)
 
-            if self.avatar_url:
-                payload["avatar_url"] = self.avatar_url
+            elif self.auth_method == 'bot':
+                payload = {
+                    "embeds": embeds
+                }
+                response = requests.post(self.api_url, json=payload, headers=self.headers, timeout=30)
 
-            response = requests.post(self.webhook_url, json=payload, timeout=30)
             response.raise_for_status()
-
             return OutputChannelResult(success=True, message=f"Overview sent to Discord ({len(embeds)} embed(s))")
 
         except Exception as e:
@@ -1142,9 +1210,67 @@ class SourceGroup:
         return f"SourceGroup(name='{self.name}', urls={len(self.urls)}, channels={self.output_channels}, prompt={bool(self.prompt)})"
 
 
-def parse_source_groups(filepath: str) -> Dict[str, SourceGroup]:
+def parse_source_groups(filepath: str, settings: Optional[Dict] = None) -> Dict[str, SourceGroup]:
     """
-    Parse sources file and return groups with their associated output channels and prompts.
+    Parse sources from file or settings and return groups with their associated output channels and prompts.
+
+    Args:
+        filepath: Path to sources file (supports both .json and .txt formats)
+        settings: Settings dictionary to check for inline sources
+
+    Returns:
+        Dictionary mapping group names to SourceGroup objects
+    """
+    # Check for inline sources in settings first
+    if settings and "sources" in settings and "groups" in settings["sources"]:
+        return _parse_source_groups_inline(settings["sources"]["groups"])
+
+    # Fall back to file-based parsing
+    try:
+        if filepath.endswith('.json'):
+            return _parse_source_groups_json(filepath)
+        else:
+            return _parse_source_groups_text(filepath)
+
+    except FileNotFoundError:
+        print(f"⚠️ Sources file not found: {filepath}")
+        return {}
+
+
+def _parse_source_groups_inline(groups_data: Dict) -> Dict[str, SourceGroup]:
+    """Parse inline sources from settings."""
+    groups = {}
+    for group_name, group_data in groups_data.items():
+        urls = group_data.get("sources", [])
+        channels = group_data.get("channels", [])
+        prompt = group_data.get("prompt")
+
+        if urls:  # Only create group if it has sources
+            groups[group_name] = SourceGroup(group_name, urls, channels, prompt)
+
+    return groups
+
+
+def _parse_source_groups_json(filepath: str) -> Dict[str, SourceGroup]:
+    """Parse JSON format sources file."""
+    with open(filepath, "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    groups = {}
+    for group_name, group_data in data.get("groups", {}).items():
+        urls = group_data.get("sources", [])
+        channels = group_data.get("channels", [])
+        prompt = group_data.get("prompt")
+
+        if urls:  # Only create group if it has sources
+            groups[group_name] = SourceGroup(group_name, urls, channels, prompt)
+
+    return groups
+
+
+def _parse_source_groups_text(filepath: str) -> Dict[str, SourceGroup]:
+    """
+    Parse text format sources file (legacy support).
 
     Args:
         filepath: Path to sources file
@@ -1204,8 +1330,8 @@ def parse_source_groups(filepath: str) -> Dict[str, SourceGroup]:
 
         return groups
 
-    except FileNotFoundError:
-        print(f"⚠️ Sources file not found: {filepath}")
+    except Exception as e:
+        print(f"⚠️ Error parsing text sources file: {e}")
         return {}
 
 
@@ -2816,7 +2942,7 @@ if __name__ == "__main__":
     if args.file:
         urls.extend(read_urls_from_file(args.file))
         # Parse groups for channel routing
-        source_groups = parse_source_groups(args.file)
+        source_groups = parse_source_groups(args.file, settings)
     if args.url:
         urls.append(args.url)
 

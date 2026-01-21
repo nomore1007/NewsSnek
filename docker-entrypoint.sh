@@ -38,11 +38,32 @@ DEFAULT_SETTINGS='{
     "article_summary": "Summarize this article briefly:",
     "overview_summary": "Based on the following news summaries, provide a comprehensive overview..."
   },
-  "files": {
-    "sources": "sources.txt",
-    "summaries": "summaries.json",
-    "database": "news_reader.db"
-  },
+   "files": {
+     "sources": "sources.json",
+     "database": "news_reader.db"
+   },
+   "sources": {
+     "groups": {
+       "general-news": {
+         "description": "General news sources for all channels",
+         "channels": [],
+         "prompt": null,
+         "sources": [
+           "https://feeds.bbci.co.uk/news/rss.xml",
+           "https://rss.cnn.com/rss/edition.rss"
+         ]
+       },
+       "tech-news": {
+         "description": "Technology news for Discord",
+         "channels": ["discord"],
+         "prompt": null,
+         "sources": [
+           "https://feeds.feedburner.com/TechCrunch/",
+           "https://www.reddit.com/r/technology/.rss"
+         ]
+       }
+     }
+   },
   "output": [
     {
       "type": "console",
@@ -63,6 +84,14 @@ DEFAULT_SETTINGS='{
         "webhook_url": "https://discord.com/api/webhooks/...",
         "username": "News Reader",
         "avatar_url": "https://example.com/avatar.png"
+      }
+    },
+    {
+      "type": "discord",
+      "config": {
+        "bot_token": "your-discord-bot-token",
+        "channel_id": "your-channel-id",
+        "username": "News Reader"
       }
     }
   ],

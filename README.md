@@ -7,11 +7,22 @@ A sophisticated Python-based RSS feed reader and web scraper that summarizes art
 - **Multi-Source Processing**: RSS feeds and direct website scraping
 - **AI-Powered Summarization**: Support for Ollama and other AI providers
 - **Multilingual Support**: Automatic language detection and translation
-- **Multiple Output Channels**: Console, Telegram, Discord
+- **Multiple Output Channels**: Console, Telegram, Discord (webhooks + bot tokens)
+- **Structured Source Groups**: JSON-based source organization with channel routing
 - **YouTube Integration**: Video transcript processing
 - **Continuous Monitoring**: Run in intervals for real-time news tracking
 - **Database Storage**: SQLite with migration support
 - **Home Assistant Integration**: Generate daily briefings
+
+## Recent Changes
+
+### v2.x - Enhanced Channel Routing & JSON Sources
+
+- **JSON Sources Format**: New structured JSON format for organizing news sources with groups, channel routing, and custom prompts
+- **Discord Bot Token Support**: Added support for Discord bot tokens alongside existing webhook authentication
+- **Source Group Routing**: Route specific source groups to specific output channels
+- **Migration Tools**: Automated migration from legacy `sources.txt` to `sources.json` format
+- **Inline Sources**: Support for defining sources directly within `settings.json`
 
 ## Quick Start
 
@@ -30,7 +41,12 @@ A sophisticated Python-based RSS feed reader and web scraper that summarizes art
    The application will automatically create `settings.json` from `settings.example.json` on first run. Edit the created `settings.json` with your configuration.
 
 4. **Add news sources**
-   The application will automatically create `sources.txt` from `sources.example.txt` on first run. Edit the created `sources.txt` with your RSS feeds and websites.
+    The application supports both JSON and text formats for sources. It will automatically create `sources.json` with the new structured format on first run. Edit the created `sources.json` with your RSS feeds and websites.
+
+    **Migrating from sources.txt to sources.json:**
+    ```bash
+    python3 migrate_sources.py
+    ```
 
 5. **Run the news reader**
    ```bash
@@ -68,7 +84,45 @@ A sophisticated Python-based RSS feed reader and web scraper that summarizes art
 
 - **Console**: Print to terminal or file
 - **Telegram**: Send summaries to Telegram chats
-- **Discord**: Post embeds to Discord webhooks
+- **Discord**: Post embeds to Discord webhooks or via bot tokens
+
+#### Discord Setup
+
+Discord supports two authentication methods:
+
+**Webhook Method** (simpler, recommended for basic usage):
+1. Go to your Discord server settings
+2. Navigate to Integrations → Webhooks
+3. Create a new webhook and copy the URL
+4. Configure in `settings.json`:
+```json
+{
+  "type": "discord",
+  "config": {
+    "webhook_url": "https://discord.com/api/webhooks/...",
+    "username": "News Reader",
+    "avatar_url": "https://example.com/avatar.png"
+  }
+}
+```
+
+**Bot Token Method** (more powerful, allows reading messages):
+1. Go to [Discord Developer Portal](https://discord.com/developers/applications)
+2. Create a new application and bot
+3. Copy the bot token from the "Bot" section
+4. Invite the bot to your server with appropriate permissions
+5. Get the channel ID (enable Developer Mode in Discord, right-click channel → Copy ID)
+6. Configure in `settings.json`:
+```json
+{
+  "type": "discord",
+  "config": {
+    "bot_token": "your-discord-bot-token",
+    "channel_id": "your-channel-id",
+    "username": "News Reader"
+  }
+}
+```
 
 ### Source Groups and Channel Routing
 
@@ -132,6 +186,80 @@ Update your `settings.json` to use named channels:
 - `[group-name:channel1,channel2]` - Sends only to specified channels (default prompt)
 - `[group-name:channel1,channel2:custom prompt]` - Sends to specified channels with custom prompt
 - `[group-name::custom prompt]` - Sends to all channels with custom prompt
+
+## Sources Configuration (JSON Format)
+
+The application now supports a structured JSON format for sources configuration, which provides better organization and validation.
+
+### JSON Sources Structure
+
+```json
+{
+  "groups": {
+    "general-news": {
+      "description": "General news sources for all channels",
+      "channels": [],
+      "prompt": null,
+      "sources": [
+        "https://feeds.bbci.co.uk/news/rss.xml",
+        "https://rss.cnn.com/rss/edition.rss"
+      ]
+    },
+    "tech-news": {
+      "description": "Technology news for Discord",
+      "channels": ["discord"],
+      "prompt": "Summarize this technical article focusing on key innovations and implications for developers",
+      "sources": [
+        "https://feeds.feedburner.com/TechCrunch/",
+        "https://www.reddit.com/r/technology/.rss"
+      ]
+    },
+    "all-channels": {
+      "description": "Sources that go to all configured channels",
+      "channels": [],
+      "prompt": null,
+      "sources": [
+        "https://example.com/rss.xml"
+      ]
+    }
+  }
+}
+```
+
+### Field Descriptions
+
+- **`description`**: Human-readable description of the group
+- **`channels`**: Array of channel names to send summaries to (empty array = all channels)
+- **`prompt`**: Custom summarization prompt for this group (null = use default)
+- **`sources`**: Array of RSS feed URLs or website URLs
+
+### Inline Sources in Settings
+
+You can also define sources directly in your `settings.json`:
+
+```json
+{
+  "sources": {
+    "groups": {
+      "my-news": {
+        "description": "My personal news sources",
+        "channels": ["telegram"],
+        "sources": ["https://example.com/feed.xml"]
+      }
+    }
+  }
+}
+```
+
+### Migration from Text Format
+
+To migrate from the old `sources.txt` format to the new JSON format:
+
+```bash
+python3 migrate_sources.py
+```
+
+This will convert your existing text-based groups to the structured JSON format.
 
 #### Custom Prompts
 
