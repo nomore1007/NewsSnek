@@ -3239,10 +3239,20 @@ if __name__ == "__main__":
                 print(f"🔄 Starting scheduled run at {time.strftime('%Y-%m-%d %H:%M:%S')}")
                 print(f"{'='*80}")
 
-                # Re-run the processing logic
-                # Note: This is a simplified version - in production you might want to
-                # reload sources and settings to pick up changes
-                urls = read_urls_from_file(args.file)
+                # Reload configuration on each cycle to pick up changes
+                print("🔄 Reloading configuration...")
+                config = NewsReaderConfig("/app/data/settings.json")
+                settings = config.settings
+                
+                # Reload output channels in case settings changed
+                output_channels = config.get_output_channels()
+                print(f"📋 Reloaded output channels: {[type(ch).__name__ for ch in output_channels]}")
+                
+                # Reload sources in case settings or sources file changed
+                default_sources_file = settings.get('files', {}).get('sources', 'sources.txt')
+                sources_file_path = f"/app/data/{default_sources_file}"
+                urls = read_urls_from_file(sources_file_path)
+                
                 summaries = load_summaries_from_db("news_reader.db")
                 error_tracking = load_error_tracking_from_db("news_reader.db")
 
