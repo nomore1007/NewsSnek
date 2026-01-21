@@ -1977,20 +1977,52 @@ def summarize_rss_feed(rss_url: str, summarizer: Summarizer, summaries: Dict, co
     error_tracking = load_error_tracking()
 
     try:
-        feed = feedparser.parse(rss_url)
+        print(f"📡 Processing RSS feed: {rss_url}")
+        feed = feedparser.parse(rss_url, timeout=30)
+
+        # Check for network/parsing errors
         if feed.bozo:  # Check if there was a parsing error
-            raise Exception(f"RSS parsing error: {feed.bozo_exception}")
-
-        feed_title = feed.feed.get('title', rss_url)
-        print(f"\n📡 Feed: {feed_title}")
-        print(f"Found {len(feed.entries)} entries\n")
-
-        if len(feed.entries) == 0:
-            print("⚠️ No entries found in RSS feed - feed might be empty or unreachable")
+            error_msg = f"RSS parsing error for {rss_url}: {feed.bozo_exception}"
+            print(f"❌ {error_msg}")
+            # Track the error
+            track_error(rss_url, "rss_parsing", str(feed.bozo_exception))
             return
 
+        if hasattr(feed, 'status') and feed.status >= 400:
+            error_msg = f"HTTP error {feed.status} for {rss_url}"
+            print(f"❌ {error_msg}")
+            track_error(rss_url, "http_error", f"Status: {feed.status}")
+            return
+
+        feed_title = feed.feed.get('title', rss_url)
+        print(f"📡 Feed: {feed_title}")
+        print(f"Found {len(feed.entries)} entries")
+
         if len(feed.entries) == 0:
-            raise Exception("RSS feed contains no entries")
+            print(f"⚠️ No entries found in RSS feed {rss_url} - feed might be empty or unreachable")
+            track_error(rss_url, "empty_feed", "No entries found")
+            return
+
+    except requests.exceptions.Timeout as e:
+        error_msg = f"Timeout fetching RSS feed {rss_url} (30s timeout)"
+        print(f"❌ {error_msg}")
+        track_error(rss_url, "timeout", str(e))
+        return
+    except requests.exceptions.ConnectionError as e:
+        error_msg = f"Connection error fetching RSS feed {rss_url} - network unreachable"
+        print(f"❌ {error_msg}")
+        track_error(rss_url, "connection_error", str(e))
+        return
+    except requests.exceptions.RequestException as e:
+        error_msg = f"Network error fetching RSS feed {rss_url}: {e}"
+        print(f"❌ {error_msg}")
+        track_error(rss_url, "network_error", str(e))
+        return
+    except Exception as e:
+        error_msg = f"Unexpected error processing RSS feed {rss_url}: {e}"
+        print(f"❌ {error_msg}")
+        track_error(rss_url, "unexpected_error", str(e))
+        return
 
         # Initialize feed entry in summaries if not exists
         if feed_title not in summaries:
