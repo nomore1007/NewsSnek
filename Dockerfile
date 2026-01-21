@@ -1,5 +1,5 @@
 #Version Control
-ARG CACHE_BUST=1
+ARG CACHE_BUST=2
 
 # Use Python 3.11 slim image
 FROM python:3.11-slim

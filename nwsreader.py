@@ -1537,6 +1537,15 @@ def report_source_health(error_tracking: Dict):
 
     return report
 
+def track_error(source_url: str, error_type: str, error_message: str, error_tracking: Dict = None):
+    """Track an error for a source using the existing error tracking system."""
+    if error_tracking is None:
+        error_tracking = load_error_tracking()
+    
+    # Track the error using the existing function
+    updated_tracking = track_source_error(source_url, error_message, error_tracking)
+    save_error_tracking(updated_tracking)
+
 def init_database(db_file: str = "news_reader.db"):
     """Initialize the SQLite database with required tables."""
     conn = sqlite3.connect(db_file)
@@ -1978,7 +1987,7 @@ def summarize_rss_feed(rss_url: str, summarizer: Summarizer, summaries: Dict, co
 
     try:
         print(f"📡 Processing RSS feed: {rss_url}")
-        feed = feedparser.parse(rss_url, timeout=30)
+        feed = feedparser.parse(rss_url)
 
         # Check for network/parsing errors
         if feed.bozo:  # Check if there was a parsing error
