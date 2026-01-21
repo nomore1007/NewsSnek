@@ -3022,7 +3022,7 @@ if __name__ == "__main__":
     output_channels = config.get_output_channels()
 
     # Debug: Show loaded settings
-    print(f"⚙️  Loaded settings from: {args.settings if hasattr(args, 'settings') else 'default path'}")
+    print(f"⚙️  Loaded settings from: {config.settings_file}")
     print(f"📋 Available output channels: {[type(ch).__name__ for ch in output_channels]}")
     print(f"📁 Sources file from settings: {settings.get('files', {}).get('sources', 'sources.txt')}")
     print(f"🤖 Ollama host: {settings.get('ollama', {}).get('host', 'localhost')}")
