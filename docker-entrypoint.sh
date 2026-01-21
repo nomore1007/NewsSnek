@@ -129,32 +129,47 @@ fi
 # Copy to runtime location
 cp /app/data/settings.json /app/settings.json
 
-# Handle sources files (prefer TXT for simplicity, but support both)
-if [ -f "/app/data/sources.txt" ]; then
-    cp /app/data/sources.txt /app/sources.txt
-    chown 1000:1000 /app/sources.txt
-elif [ -f "/app/data/sources.json" ]; then
-    cp /app/data/sources.json /app/sources.json
-    chown 1000:1000 /app/sources.json
+# Handle sources files - ONLY use the file specified in settings
+SOURCES_FILE=$(grep -o '"sources":\s*"[^"]*"' /app/settings.json | cut -d'"' -f4)
+
+echo "🔧 Sources file specified in settings: $SOURCES_FILE"
+
+# Remove any existing sources files to avoid conflicts
+rm -f /app/sources.txt /app/sources.json
+
+if [ -f "/app/data/$SOURCES_FILE" ]; then
+    echo "📁 Copying $SOURCES_FILE from mounted data directory"
+    cp "/app/data/$SOURCES_FILE" "/app/$SOURCES_FILE"
+    chown 1000:1000 "/app/$SOURCES_FILE"
 else
-    # Create default sources.txt (simpler format)
-    echo "📝 Creating default sources.txt..."
-    cat > /app/sources.txt << 'EOF'
-# General news sources for all channels
+    echo "⚠️  $SOURCES_FILE not found in /app/data, creating default..."
+    if [ "$SOURCES_FILE" = "sources.json" ]; then
+        echo "$DEFAULT_SETTINGS" | grep -A 50 '"sources"' | grep -B 50 '"interval"' > "/app/$SOURCES_FILE"
+    else
+        # Create default sources.txt
+        cat > "/app/$SOURCES_FILE" << 'EOF'
+# News Sources Configuration
+# You can organize sources into groups that send to different output channels
+
+[telegram-news]
+# General news sources for Telegram
 https://feeds.bbci.co.uk/news/rss.xml
-https://rss.cnn.com/rss.edition.rss
+https://rss.cnn.com/rss/edition.rss
 
-# Technology news (Discord channel)
-[tech-news:discord]
+[discord-tech:discord]
+# Technology news for Discord
 https://feeds.feedburner.com/TechCrunch/
-https://www.reddit.com/r/technology/.rss
+https://www.reddit.com/technology/.rss
 
-# YouTube channels
-https://www.youtube.com/feeds/videos.xml?channel_id=UCupvZG-5ko_eiXAupbDfxWw
-https://www.youtube.com/feeds/videos.xml?channel_id=UC16niRr50-MSBwiO3YDb3RA
+[all-channels]
+# Sources that go to all configured channels
+https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml
 EOF
-    chown 1000:1000 /app/sources.txt
+    fi
+    chown 1000:1000 "/app/$SOURCES_FILE"
 fi
+
+echo "✅ Using sources file: /app/$SOURCES_FILE"
 
 chown 1000:1000 /app/settings.json
 
