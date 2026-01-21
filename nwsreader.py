@@ -2999,11 +2999,7 @@ def process_single_article(url: str, title: str, content: str, summarizer: Summa
 
 if __name__ == "__main__":
     # Load settings and initialize new architecture components
-    config = NewsReaderConfig()
-    settings = config.settings  # Keep backward compatibility
-
-    # Initialize new architecture components
-    config = NewsReaderConfig()
+    config = NewsReaderConfig("/app/data/settings.json")
     settings = config.settings  # Keep backward compatibility
 
     # Log current database status

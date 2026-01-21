@@ -139,18 +139,21 @@ else
     echo "$DEFAULT_SETTINGS" > /app/settings.json
 fi
 
-# Read sources file setting from mounted or default settings
-SOURCES_FILE=$(grep -o '"sources":\s*"[^"]*"' /app/settings.json 2>/dev/null | cut -d'"' -f4)
+# Read sources file setting from mounted settings and ensure only that file is used
+SOURCES_FILE=$(grep -o '"sources":\s*"[^"]*"' /app/data/settings.json 2>/dev/null | cut -d'"' -f4)
 if [ -z "$SOURCES_FILE" ]; then
     SOURCES_FILE="sources.txt"
 fi
 
 echo "🔧 Sources file specified in settings: $SOURCES_FILE"
 
-# Use sources file directly from mounted directory
+# Remove ANY existing sources files to avoid conflicts
+rm -f /app/sources.txt /app/sources.json
+
+# Use ONLY the sources file specified in settings from mounted directory
 if [ -f "/app/data/$SOURCES_FILE" ]; then
     echo "📁 Using mounted $SOURCES_FILE from /app/data"
-    ln -sf /app/data/$SOURCES_FILE "/app/$SOURCES_FILE"
+    ln -sf "/app/data/$SOURCES_FILE" "/app/$SOURCES_FILE"
 else
     echo "⚠️  $SOURCES_FILE not found in /app/data, creating default in /app..."
     if [ "$SOURCES_FILE" = "sources.json" ]; then
@@ -178,7 +181,7 @@ EOF
     fi
 fi
 
-echo "✅ Using sources file: /app/$SOURCES_FILE (points to mounted data)"
+echo "✅ Using ONLY sources file: /app/$SOURCES_FILE (from /app/data)"
 
 chown 1000:1000 /app/settings.json
 
