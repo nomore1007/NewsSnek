@@ -1,0 +1,64 @@
+{
+  "ollama": {
+    "host": "localhost",
+    "model": "smollm2:135m",
+    "overview_model": "llama2",
+    "timeout": 120
+  },
+  "processing": {
+    "max_overview_summaries": 50,
+    "scrape_timeout": 30,
+    "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+  },
+  "prompts": {
+    "article_summary": "Summarize this article briefly:",
+    "overview_summary": "Based on the following news summaries, provide a comprehensive overview..."
+  },
+  "files": {
+    "sources": "sources.txt",
+    "summaries": "summaries.json",
+    "database": "news_reader.db"
+  },
+  "output": {
+    "channels": {
+      "console": {
+        "type": "console",
+        "config": {
+          "output_file": null
+        }
+      },
+      "discord-main": {
+        "type": "discord_webhook",
+        "config": {
+          "webhook_url": "https://discord.com/api/webhooks/YOUR_MAIN_WEBHOOK",
+          "username": "News Reader",
+          "avatar_url": "https://example.com/avatar.png"
+        }
+      },
+      "discord-tech": {
+        "type": "discord_webhook", 
+        "config": {
+          "webhook_url": "https://discord.com/api/webhooks/YOUR_TECH_WEBHOOK",
+          "username": "Tech News",
+          "avatar_url": "https://example.com/tech-avatar.png"
+        }
+      },
+      "telegram-bot": {
+        "type": "telegram",
+        "config": {
+          "bot_token": "your-telegram-bot-token",
+          "chat_id": "your-chat-id"
+        }
+      },
+      "urgent-alerts": {
+        "type": "discord_webhook",
+        "config": {
+          "webhook_url": "https://discord.com/api/webhooks/YOUR_URGENT_WEBHOOK",
+          "username": "🚨 Urgent News",
+          "avatar_url": "https://example.com/alert.png"
+        }
+      }
+    }
+  },
+  "interval": 60
+}

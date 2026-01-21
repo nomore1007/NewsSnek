@@ -1,0 +1,40 @@
+# News Sources Configuration with Named Output Channels
+# Format: [group-name] or [group-name:output1,output2] or [group-name:output1,output2:custom-prompt]
+
+# General news to main Discord and console
+[general-news:discord-main,console]
+# General news sources
+https://feeds.bbci.co.uk/news/rss.xml
+https://rss.cnn.com/rss/edition.rss
+https://feeds.npr.org/1001/rss.xml
+
+# Tech news to dedicated tech Discord
+[tech-news:discord-tech]
+# Technology news with tech-focused channels
+https://feeds.feedburner.com/TechCrunch/
+https://www.reddit.com/r/technology/.rss
+https://arstechnica.com/rss.xml
+
+# Urgent breaking news to alerts channel
+[urgent-news:urgent-alerts]
+# Breaking news sources
+https://feeds.reuters.com/reuters/topNews
+https://rss.cnn.com/rss/cnn_breakingnews.rss
+
+# Financial news to main channel
+[finance:discord-main]
+# Business and finance sources
+https://feeds.bloomberg.com/markets/news.rss
+https://feeds.finance.yahoo.com/rss/2.0/headline
+
+# YouTube channels to console for monitoring
+[youtube-channels:console]
+# YouTube RSS feeds
+https://www.youtube.com/feeds/videos.xml?channel_id=UCupvZG-5ko_eiXAupbDfxWw
+https://www.youtube.com/feeds/videos.xml?channel_id=UC16niRr50-MSBwiO3YDb3RA
+
+# Sports news with custom prompt
+[sports:discord-tech:Focus on game results, player updates, and league standings]
+# Sports RSS feeds
+https://www.espn.com/espn/rss/news
+https://feeds.bbci.co.uk/sport/rss.xml

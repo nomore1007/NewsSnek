@@ -2192,35 +2192,68 @@ def _parse_flat_sources(content: str, filepath: str) -> List[str]:
 
 
 def _parse_grouped_sources(content: str, filepath: str) -> List[str]:
-    """Parse grouped sources file format and flatten to URLs."""
-    lines = content.split('\n')
-    current_group = None
-    groups = {}
+    """Parse grouped sources format with support for multiple output channel mapping.
+    
+    Format: [group-name] or [group-name:output1,output2] or [group-name:output1,output2:custom-prompt]
+    Examples:
+        [tech-news]                          # Goes to all outputs
+        [urgent-news:discord,telegram]         # Goes to Discord and Telegram outputs
+        [finance:bloomberg-bot,email-digest]   # Goes to specific named outputs
+        [sports:discord-webhook: Sports only summary]  # Custom prompt
+    """
     urls = []
-
-    for line in lines:
+    current_group = None
+    current_outputs = []
+    current_prompt = None
+    
+    for line in content.split('\n'):
         line = line.strip()
+        
         if not line or line.startswith('#'):
             continue
-
+            
+        # Check for group header
         if line.startswith('[') and line.endswith(']'):
-            # New group header
-            current_group = line[1:-1]  # Remove brackets
-            if current_group not in groups:
-                groups[current_group] = []
-        elif current_group:
-            # URL in current group
-            groups[current_group].append(line)
-            urls.append(line)
-
+            header_content = line[1:-1].strip()
+            parts = header_content.split(':')
+            
+            current_group = parts[0].strip()
+            
+            if len(parts) >= 2:
+                # Parse output channels
+                output_names = parts[1].strip().split(',')
+                current_outputs = [out.strip() for out in output_names if out.strip()]
+                
+                # Check for custom prompt
+                if len(parts) >= 3:
+                    current_prompt = parts[2].strip()
+                else:
+                    current_prompt = None
+            else:
+                # No outputs specified = send to all
+                current_outputs = []
+                current_prompt = None
+            
+            print(f"   📝 Group: {current_group}")
+            if current_outputs:
+                print(f"   📤 Outputs: {', '.join(current_outputs)}")
+            else:
+                print(f"   📤 Outputs: all configured outputs")
+            if current_prompt:
+                print(f"   📝 Custom prompt: {current_prompt[:50]}...")
+            continue
+            
+        # Check if it's a URL
+        if line.startswith(('http://', 'https://')):
+            urls.append((line.strip(), current_group, current_outputs, current_prompt))
+    
     print(f"📄 Loaded {len(urls)} URLs from {filepath} (grouped format):")
-    for group_name, group_urls in groups.items():
-        print(f"   📁 {group_name}: {len(group_urls)} sources")
-        for i, url in enumerate(group_urls[:2]):  # Show first 2 per group
-            print(f"      {i+1}. {url}")
-        if len(group_urls) > 2:
-            print(f"      ... and {len(group_urls) - 2} more")
-
+    for url, group, outputs, prompt in urls[:3]:  # Show first 3 examples
+        output_str = ', '.join(outputs) if outputs else 'all'
+        print(f"   📁 {group} → {output_str}: {url}")
+    if len(urls) > 3:
+        print(f"   ... and {len(urls) - 3} more")
+    
     return urls
 
 
