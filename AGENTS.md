@@ -20,8 +20,9 @@ python3 migrate_sources.py
 ```
 
 ### Error Handling
-The application provides clear error messages when Ollama is unavailable:
-- **Connection errors**: "Cannot connect to Ollama server at [host]:11434"
+The application provides clear error messages when issues occur:
+- **JSON parsing errors**: Specific error messages with troubleshooting tips
+- **Ollama connection errors**: "Cannot connect to Ollama server at [host]:11434"
 - **Model not found**: "Model '[model]' not found" with installation instructions
 - **Timeout errors**: Clear timeout messages with duration
 - **Graceful degradation**: Articles are skipped but not marked complete for retry

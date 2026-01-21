@@ -2932,6 +2932,14 @@ if __name__ == "__main__":
     config = NewsReaderConfig()
     settings = config.settings  # Keep backward compatibility
 
+    # Log current database status
+    try:
+        summaries = load_summaries_from_db("news_reader.db")
+        total_articles = sum(len(articles) for articles in summaries.values())
+        print(f"📊 Database status: {total_articles} summarized articles from {len(summaries)} sources")
+    except Exception as e:
+        print(f"⚠️ Could not read database status: {e}")
+
     # Initialize new architecture components
     summarizer_config = config.get_summarizer_config()
     summarizer = SummarizerFactory.create_summarizer(summarizer_config)
@@ -2963,6 +2971,12 @@ if __name__ == "__main__":
     parser.add_argument("--overview-prompt", default=settings.get("prompts", {}).get("overview_summary", "Based on the following news summaries, provide a comprehensive overview..."), help="Custom prompt for overview generation")
     parser.add_argument("--interval", "-i", type=int, help="Run in a loop with specified interval in minutes (for continuous monitoring)")
     args = parser.parse_args()
+
+    # Show startup information
+    if args.interval:
+        print(f"🔄 Starting NewsSnek in continuous mode (interval: {args.interval} minutes)")
+    else:
+        print("🔄 Starting NewsSnek in single-run mode")
 
     # Handle migration if requested
     if args.migrate:
