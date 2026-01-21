@@ -39,9 +39,9 @@ DEFAULT_SETTINGS='{
     "overview_summary": "Based on the following news summaries, provide a comprehensive overview..."
   },
    "files": {
-     "sources": "sources.json",
+     "sources": "sources.txt",
      "database": "news_reader.db"
-   },
+    },
    "sources": {
      "groups": {
        "general-news": {
