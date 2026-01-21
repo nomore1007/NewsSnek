@@ -130,6 +130,10 @@ fi
 if [ -f "/app/data/settings.json" ]; then
     echo "📁 Using mounted settings.json from /app/data"
     ln -sf /app/data/settings.json /app/settings.json
+    
+    # Debug: Show what the settings file contains for sources
+    echo "🔍 Settings content for sources section:"
+    grep -A 5 '"files"' /app/data/settings.json || echo "No files section found"
 else
     echo "📝 Creating default settings.json..."
     echo "$DEFAULT_SETTINGS" > /app/settings.json

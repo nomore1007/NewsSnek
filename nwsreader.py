@@ -3024,9 +3024,15 @@ if __name__ == "__main__":
     # Debug: Show loaded settings
     print(f"⚙️  Loaded settings from: {config.settings_file}")
     print(f"📋 Available output channels: {[type(ch).__name__ for ch in output_channels]}")
-    print(f"📁 Sources file from settings: {settings.get('files', {}).get('sources', 'sources.txt')}")
+    
+    files_section = settings.get('files', {})
+    sources_file = files_section.get('sources', 'sources.txt')
+    print(f"📁 Sources file from settings: {sources_file}")
     print(f"🤖 Ollama host: {settings.get('ollama', {}).get('host', 'localhost')}")
     print(f"🧠 Ollama model: {settings.get('ollama', {}).get('model', 'smollm2:135m')}")
+    
+    # Debug: Show full files section
+    print(f"📄 Full files section from settings: {files_section}")
 
     # Set defaults from settings (backward compatibility) with safe access
     default_host = settings.get("ollama", {}).get("host", "localhost")
