@@ -3021,6 +3021,13 @@ if __name__ == "__main__":
     data_manager = DataManager(config)
     output_channels = config.get_output_channels()
 
+    # Debug: Show loaded settings
+    print(f"⚙️  Loaded settings from: {args.settings if hasattr(args, 'settings') else 'default path'}")
+    print(f"📋 Available output channels: {[type(ch).__name__ for ch in output_channels]}")
+    print(f"📁 Sources file from settings: {settings.get('files', {}).get('sources', 'sources.txt')}")
+    print(f"🤖 Ollama host: {settings.get('ollama', {}).get('host', 'localhost')}")
+    print(f"🧠 Ollama model: {settings.get('ollama', {}).get('model', 'smollm2:135m')}")
+
     # Set defaults from settings (backward compatibility) with safe access
     default_host = settings.get("ollama", {}).get("host", "localhost")
     default_model = settings.get("ollama", {}).get("model", "smollm2:135m")

@@ -126,23 +126,29 @@ if [ ! -f "/app/data/sources.txt" ]; then
     chown 1000:1000 /app/data/sources.txt
 fi
 
-# Copy to runtime location
-cp /app/data/settings.json /app/settings.json
+# Use files directly from mounted data directory
+if [ -f "/app/data/settings.json" ]; then
+    echo "📁 Using mounted settings.json from /app/data"
+    ln -sf /app/data/settings.json /app/settings.json
+else
+    echo "📝 Creating default settings.json..."
+    echo "$DEFAULT_SETTINGS" > /app/settings.json
+fi
 
-# Handle sources files - ONLY use the file specified in settings
-SOURCES_FILE=$(grep -o '"sources":\s*"[^"]*"' /app/settings.json | cut -d'"' -f4)
+# Read sources file setting from mounted or default settings
+SOURCES_FILE=$(grep -o '"sources":\s*"[^"]*"' /app/settings.json 2>/dev/null | cut -d'"' -f4)
+if [ -z "$SOURCES_FILE" ]; then
+    SOURCES_FILE="sources.txt"
+fi
 
 echo "🔧 Sources file specified in settings: $SOURCES_FILE"
 
-# Remove any existing sources files to avoid conflicts
-rm -f /app/sources.txt /app/sources.json
-
+# Use sources file directly from mounted directory
 if [ -f "/app/data/$SOURCES_FILE" ]; then
-    echo "📁 Copying $SOURCES_FILE from mounted data directory"
-    cp "/app/data/$SOURCES_FILE" "/app/$SOURCES_FILE"
-    chown 1000:1000 "/app/$SOURCES_FILE"
+    echo "📁 Using mounted $SOURCES_FILE from /app/data"
+    ln -sf /app/data/$SOURCES_FILE "/app/$SOURCES_FILE"
 else
-    echo "⚠️  $SOURCES_FILE not found in /app/data, creating default..."
+    echo "⚠️  $SOURCES_FILE not found in /app/data, creating default in /app..."
     if [ "$SOURCES_FILE" = "sources.json" ]; then
         echo "$DEFAULT_SETTINGS" | grep -A 50 '"sources"' | grep -B 50 '"interval"' > "/app/$SOURCES_FILE"
     else
@@ -166,10 +172,9 @@ https://www.reddit.com/technology/.rss
 https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml
 EOF
     fi
-    chown 1000:1000 "/app/$SOURCES_FILE"
 fi
 
-echo "✅ Using sources file: /app/$SOURCES_FILE"
+echo "✅ Using sources file: /app/$SOURCES_FILE (points to mounted data)"
 
 chown 1000:1000 /app/settings.json
 
