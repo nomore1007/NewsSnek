@@ -305,6 +305,8 @@ https://rss.cnn.com/rss/edition.rss
    docker run -v /opt/newsnek:/app/data news-reader
    ```
 
+   The container will automatically create `sources.json` with default news sources and run in continuous mode, processing feeds every 60 minutes.
+
 4. **Portainer Stack**
    ```yaml
    services:

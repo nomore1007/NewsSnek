@@ -86,12 +86,22 @@ pip install -r requirements.txt
 
 ### Running the Application
 ```bash
-# Process sources and generate overview
-python3 nwsreader.py --file sources.txt --overview
+# Single run - process sources and generate overview
+python3 nwsreader.py --file sources.json --overview
+
+# Continuous mode - process every N minutes
+python3 nwsreader.py --file sources.json --overview --interval 60
 
 # Process single URL
 python3 nwsreader.py --url "https://example.com/article"
 ```
+
+### Docker Usage
+The Docker container runs in continuous mode by default:
+- Uses `sources.json` for structured source groups
+- Processes feeds every 60 minutes
+- Shows database status and processing logs
+- Requires Ollama server for summarization
 
 ### File Structure
 
