@@ -340,8 +340,9 @@ class NewsReaderConfig:
                     with open(path, 'r') as f:
                         self.settings = json.load(f)
                     return
-                except json.JSONDecodeError:
-                    print(f"Warning: Invalid JSON in {path}, trying other locations")
+                except json.JSONDecodeError as e:
+                    print(f"⚠️ Invalid JSON in {path}: {e}")
+                    print(f"💡 Check for missing commas, quotes, or bracket mismatches")
                     continue
 
         # Config files are created by Docker entrypoint, use defaults as fallback
