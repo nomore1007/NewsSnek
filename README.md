@@ -188,9 +188,28 @@ Update your `settings.json` to use named channels:
 - `[group-name:channel1,channel2:custom prompt]` - Sends to specified channels with custom prompt
 - `[group-name::custom prompt]` - Sends to all channels with custom prompt
 
-## Sources Configuration (JSON Format)
+## Sources Configuration
 
-The application now supports a structured JSON format for sources configuration, which provides better organization and validation.
+The application supports both simple text and structured JSON formats for sources configuration.
+
+### Text Format (Recommended)
+
+The simplest format is `sources.txt`:
+
+```
+# General news sources
+https://feeds.bbci.co.uk/news/rss.xml
+https://rss.cnn.com/rss/edition.rss
+
+# Technology news for Discord
+[tech-news:discord]
+https://feeds.feedburner.com/TechCrunch/
+https://www.reddit.com/r/technology/.rss
+```
+
+### JSON Format (Advanced)
+
+For more advanced features, use `sources.json`:
 
 ### JSON Sources Structure
 

@@ -351,17 +351,18 @@ class NewsReaderConfig:
 
     def _ensure_sources_file(self):
         """Ensure sources file exists (JSON or text), creating from settings or example if needed."""
-        sources_file = self.settings.get("files", {}).get("sources", "sources.json")
+        sources_file = self.settings.get("files", {}).get("sources", "sources.txt")
 
         # Check if sources are defined inline in settings
         if "sources" in self.settings and "groups" in self.settings["sources"]:
             print("✅ Using inline sources from settings.json")
             return  # Sources defined inline
 
+        # Priority: JSON first (new format), then TXT (legacy)
         sources_paths = [
-            sources_file,        # Configured location
-            "sources.json",      # JSON format
+            "sources.json",      # Preferred JSON format
             "sources.txt",       # Legacy text format
+            sources_file,        # Configured location (fallback)
         ]
 
         for path in sources_paths:
@@ -370,11 +371,8 @@ class NewsReaderConfig:
                 self.settings["files"]["sources"] = path
                 return  # File found
 
-        # Create default sources file (JSON format preferred)
-        if sources_file.endswith('.json'):
-            self._create_default_sources_json(sources_file)
-        else:
-            self._create_default_sources_text(sources_file)
+        # Create default sources file (TXT format for simplicity)
+        self._create_default_sources_text("sources.txt")
 
     def _create_default_sources_json(self, filepath: str):
         """Create default sources file in JSON format."""
@@ -867,13 +865,17 @@ class ConsoleOutputChannel(OutputChannel):
             if self.output_file:
                 with open(self.output_file, 'a', encoding='utf-8') as f:
                     f.write(output)
+                print(f"✅ Console: Summary written to {self.output_file}")
                 return OutputChannelResult(success=True, message=f"Written to {self.output_file}")
             else:
                 print(output)
+                print(f"✅ Console: Summary printed to console")
                 return OutputChannelResult(success=True, message="Printed to console")
 
         except Exception as e:
-            return OutputChannelResult(success=False, error=f"Console output failed: {e}")
+            error_msg = f"Console output failed: {e}"
+            print(f"❌ {error_msg}")
+            return OutputChannelResult(success=False, error=error_msg)
 
     def send_overview(self, overview: str, date: str = "") -> OutputChannelResult:
         """
@@ -897,13 +899,17 @@ class ConsoleOutputChannel(OutputChannel):
             if self.output_file:
                 with open(self.output_file, 'w', encoding='utf-8') as f:
                     f.write(output)
+                print(f"✅ Console: Overview written to {self.output_file}")
                 return OutputChannelResult(success=True, message=f"Overview written to {self.output_file}")
             else:
                 print(output)
+                print(f"✅ Console: Overview printed to console")
                 return OutputChannelResult(success=True, message="Overview printed to console")
 
         except Exception as e:
-            return OutputChannelResult(success=False, error=f"Console overview output failed: {e}")
+            error_msg = f"Console overview output failed: {e}"
+            print(f"❌ {error_msg}")
+            return OutputChannelResult(success=False, error=error_msg)
 
 
 class TelegramOutputChannel(OutputChannel):
@@ -960,12 +966,18 @@ class TelegramOutputChannel(OutputChannel):
 
             result = response.json()
             if result.get('ok'):
-                return OutputChannelResult(success=True, message=f"Message sent (ID: {result['result']['message_id']})")
+                message_id = result['result']['message_id']
+                print(f"✅ Telegram: Summary sent to chat {self.chat_id} (message ID: {message_id})")
+                return OutputChannelResult(success=True, message=f"Message sent (ID: {message_id})")
             else:
-                return OutputChannelResult(success=False, error=f"Telegram API error: {result}")
+                error_msg = f"Telegram API error: {result}"
+                print(f"❌ {error_msg}")
+                return OutputChannelResult(success=False, error=error_msg)
 
         except Exception as e:
-            return OutputChannelResult(success=False, error=f"Telegram send failed: {e}")
+            error_msg = f"Telegram send failed: {e}"
+            print(f"❌ {error_msg}")
+            return OutputChannelResult(success=False, error=error_msg)
 
     def send_overview(self, overview: str, date: str = "") -> OutputChannelResult:
         """
@@ -1004,6 +1016,7 @@ class TelegramOutputChannel(OutputChannel):
                     import time
                     time.sleep(0.1)  # Small delay between messages
 
+                print(f"✅ Telegram: Overview sent to chat {self.chat_id} in {len(chunks)} messages")
                 return OutputChannelResult(success=True, message=f"Overview sent in {len(chunks)} messages")
             else:
                 payload = {
@@ -1017,12 +1030,18 @@ class TelegramOutputChannel(OutputChannel):
 
                 result = response.json()
                 if result.get('ok'):
-                    return OutputChannelResult(success=True, message=f"Overview sent (ID: {result['result']['message_id']})")
+                    message_id = result['result']['message_id']
+                    print(f"✅ Telegram: Overview sent to chat {self.chat_id} (message ID: {message_id})")
+                    return OutputChannelResult(success=True, message=f"Overview sent (ID: {message_id})")
                 else:
-                    return OutputChannelResult(success=False, error=f"Telegram API error: {result}")
+                    error_msg = f"Telegram API error: {result}"
+                    print(f"❌ {error_msg}")
+                    return OutputChannelResult(success=False, error=error_msg)
 
         except Exception as e:
-            return OutputChannelResult(success=False, error=f"Telegram overview send failed: {e}")
+            error_msg = f"Telegram overview send failed: {e}"
+            print(f"❌ {error_msg}")
+            return OutputChannelResult(success=False, error=error_msg)
 
     def _split_message(self, text: str, max_length: int) -> List[str]:
         """Split a long message into chunks at word boundaries."""
@@ -1117,18 +1136,22 @@ class DiscordOutputChannel(OutputChannel):
                 if self.avatar_url:
                     payload["avatar_url"] = self.avatar_url
                 response = requests.post(self.webhook_url, json=payload, timeout=30)
+                print(f"✅ Discord webhook: Summary sent successfully")
 
             elif self.auth_method == 'bot':
                 payload = {
                     "embeds": [embed]
                 }
                 response = requests.post(self.api_url, json=payload, headers=self.headers, timeout=30)
+                print(f"✅ Discord bot: Summary sent to channel {self.channel_id}")
 
             response.raise_for_status()
             return OutputChannelResult(success=True, message="Summary sent to Discord")
 
         except Exception as e:
-            return OutputChannelResult(success=False, error=f"Discord send failed: {e}")
+            error_msg = f"Discord send failed: {e}"
+            print(f"❌ {error_msg}")
+            return OutputChannelResult(success=False, error=error_msg)
 
     def send_overview(self, overview: str, date: str = "") -> OutputChannelResult:
         """
@@ -1174,18 +1197,22 @@ class DiscordOutputChannel(OutputChannel):
                 if self.avatar_url:
                     payload["avatar_url"] = self.avatar_url
                 response = requests.post(self.webhook_url, json=payload, timeout=30)
+                print(f"✅ Discord webhook: Overview sent successfully ({len(embeds)} embeds)")
 
             elif self.auth_method == 'bot':
                 payload = {
                     "embeds": embeds
                 }
                 response = requests.post(self.api_url, json=payload, headers=self.headers, timeout=30)
+                print(f"✅ Discord bot: Overview sent to channel {self.channel_id} ({len(embeds)} embeds)")
 
             response.raise_for_status()
             return OutputChannelResult(success=True, message=f"Overview sent to Discord ({len(embeds)} embed(s))")
 
         except Exception as e:
-            return OutputChannelResult(success=False, error=f"Discord overview send failed: {e}")
+            error_msg = f"Discord overview send failed: {e}"
+            print(f"❌ {error_msg}")
+            return OutputChannelResult(success=False, error=error_msg)
 
     def _split_overview(self, text: str, max_length: int) -> List[str]:
         """Split overview text into chunks at paragraph boundaries."""
@@ -3031,15 +3058,21 @@ if __name__ == "__main__":
 
         # Send overview to configured output channels
         current_date = datetime.now().strftime("%Y-%m-%d")
+        successful_sends = 0
+        total_channels = len(output_channels)
+
         for channel in output_channels:
             try:
                 result = channel.send_overview(overview, current_date)
                 if result.success:
+                    successful_sends += 1
                     print(f"✅ Overview sent to {type(channel).__name__}: {result.message}")
                 else:
                     print(f"❌ Failed to send overview to {type(channel).__name__}: {result.error}")
             except Exception as e:
                 print(f"❌ Error sending overview to {type(channel).__name__}: {e}")
+
+        print(f"\n📊 Overview delivery: {successful_sends}/{total_channels} channels successful")
 
         # Display overview
         print("\n" + "="*80)

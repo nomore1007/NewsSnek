@@ -128,45 +128,35 @@ fi
 
 # Copy to runtime location
 cp /app/data/settings.json /app/settings.json
-cp /app/data/sources.txt /app/sources.txt
 
-# Create sources.json if it doesn't exist
-if [ ! -f "/app/data/sources.json" ] && [ ! -f "/app/sources.json" ]; then
-    echo "📝 Creating default sources.json..."
-    cat > /app/sources.json << 'EOF'
-{
-  "groups": {
-    "general-news": {
-      "description": "General news sources for all channels",
-      "channels": [],
-      "prompt": null,
-      "sources": [
-        "https://feeds.bbci.co.uk/news/rss.xml",
-        "https://rss.cnn.com/rss/edition.rss"
-      ]
-    },
-    "tech-news": {
-      "description": "Technology news for Discord",
-      "channels": ["discord"],
-      "prompt": null,
-      "sources": [
-        "https://feeds.feedburner.com/TechCrunch/",
-        "https://www.reddit.com/r/technology/.rss"
-      ]
-    }
-  }
-}
-EOF
-    chown 1000:1000 /app/sources.json
-fi
-
-# Copy sources.json if it exists
-if [ -f "/app/data/sources.json" ]; then
+# Handle sources files (prefer TXT for simplicity, but support both)
+if [ -f "/app/data/sources.txt" ]; then
+    cp /app/data/sources.txt /app/sources.txt
+    chown 1000:1000 /app/sources.txt
+elif [ -f "/app/data/sources.json" ]; then
     cp /app/data/sources.json /app/sources.json
     chown 1000:1000 /app/sources.json
+else
+    # Create default sources.txt (simpler format)
+    echo "📝 Creating default sources.txt..."
+    cat > /app/sources.txt << 'EOF'
+# General news sources for all channels
+https://feeds.bbci.co.uk/news/rss.xml
+https://rss.cnn.com/rss.edition.rss
+
+# Technology news (Discord channel)
+[tech-news:discord]
+https://feeds.feedburner.com/TechCrunch/
+https://www.reddit.com/r/technology/.rss
+
+# YouTube channels
+https://www.youtube.com/feeds/videos.xml?channel_id=UCupvZG-5ko_eiXAupbDfxWw
+https://www.youtube.com/feeds/videos.xml?channel_id=UC16niRr50-MSBwiO3YDb3RA
+EOF
+    chown 1000:1000 /app/sources.txt
 fi
 
-chown 1000:1000 /app/settings.json /app/sources.txt
+chown 1000:1000 /app/settings.json
 
 echo "✅ Configuration ready - NewsSnek is starting..."
 
