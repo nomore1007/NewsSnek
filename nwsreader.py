@@ -1105,6 +1105,7 @@ class DiscordOutputChannel(OutputChannel):
     def is_available(self) -> bool:
         """Check if Discord is properly configured and connected."""
         if self.auth_method is None:
+            print("❌ Discord: No valid authentication method configured")
             return False
 
         if self.auth_method == 'bot':
@@ -1114,17 +1115,28 @@ class DiscordOutputChannel(OutputChannel):
                                       headers={'Authorization': f'Bot {self.bot_token}'},
                                       timeout=10)
                 if response.status_code == 200:
-                    # Optionally check channel access
+                    # Check channel access
                     channel_response = requests.get(f"https://discord.com/api/v10/channels/{self.channel_id}",
                                                    headers={'Authorization': f'Bot {self.bot_token}'},
                                                    timeout=10)
-                    return channel_response.status_code == 200
-                return False
-            except Exception:
+                    if channel_response.status_code == 200:
+                        return True
+                    else:
+                        print(f"❌ Discord: Cannot access channel {self.channel_id} ({channel_response.status_code}: {channel_response.text})")
+                        return False
+                else:
+                    print(f"❌ Discord: Invalid bot token ({response.status_code}: {response.text})")
+                    return False
+            except Exception as e:
+                print(f"❌ Discord: Connection failed ({e})")
                 return False
         elif self.auth_method == 'webhook':
             # For webhook, just check if URL is set (can't test without posting)
-            return bool(self.webhook_url)
+            if self.webhook_url:
+                return True
+            else:
+                print("❌ Discord: Webhook URL not configured")
+                return False
 
         return False
 
