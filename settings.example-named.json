@@ -1,6 +1,6 @@
 {
   "ollama": {
-    "host": "localhost",
+    "host": "http://localhost:11434",
     "model": "smollm2:135m",
     "overview_model": "llama2",
     "timeout": 120

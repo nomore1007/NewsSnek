@@ -5,28 +5,7 @@
 
 set -e
 
-# Parse arguments for workdir
-WORK_DIR=$(pwd)
-ARGS=()
-
-while [[ $# -gt 0 ]]; do
-  case $1 in
-    --workdir)
-      WORK_DIR="$2"
-      shift 2
-      ;;
-    *)
-      ARGS+=("$1")
-      shift
-      ;;
-  esac
-done
-
-# Set working directory
-cd "$WORK_DIR" || exit 1
-
 echo "=== NewsSnek Entrypoint v$(cat /app/VERSION 2>/dev/null | grep VERSION | cut -d'=' -f2 || echo 'unknown') ==="
-echo "Working directory set to: $WORK_DIR"
 
 # Ensure data directory exists and has correct permissions
 mkdir -p "$WORK_DIR"
@@ -44,7 +23,7 @@ DEFAULT_SETTINGS='{
   "summarizer": {
     "provider": "ollama",
     "config": {
-      "host": "localhost",
+      "host": "http://localhost:11434",
       "model": "smollm2:135m",
       "timeout": 120,
       "preferred_language": "en"
@@ -210,9 +189,6 @@ echo "✅ Using ONLY sources file: /app/$SOURCES_FILE (from $WORK_DIR)"
 chown 1000:1000 /app/settings.json
 
 echo "✅ Configuration ready - NewsSnek is starting..."
-
-# Execute the main command
-exec "${ARGS[@]}"
 
 # Execute command (already running with appropriate permissions)
 exec "$@"

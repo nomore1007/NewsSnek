@@ -32,7 +32,7 @@ import sys
 import os
 import sqlite3
 from bs4 import BeautifulSoup
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urljoin, urlparse, quote
 from typing import Dict, List, Tuple, Optional, Protocol, Any
 from datetime import datetime, timedelta
 from abc import ABC, abstractmethod
@@ -189,7 +189,11 @@ class OllamaSummarizer(Summarizer):
             config: Must contain 'host', 'model', and 'timeout' options
         """
         super().__init__(config)
-        self.host = config.options.get('host', 'localhost')
+        host_url = config.options.get('host', 'http://localhost:11434')
+        parsed = urlparse(host_url)
+        self.host = parsed.hostname
+        self.port = parsed.port or 11434
+        self.scheme = parsed.scheme
         self.model = config.options.get('model', 'smollm2:135m')
         self.timeout = config.options.get('timeout', 120)
         self.preferred_language = config.options.get('preferred_language', 'en')
@@ -198,7 +202,7 @@ class OllamaSummarizer(Summarizer):
         """Check if Ollama service is accessible."""
         try:
             # Simple health check by trying to reach the API
-            response = requests.get(f"http://{self.host}:11434/api/tags", timeout=5)
+            response = requests.get(f"{self.scheme}://{self.host}:{self.port}/api/tags", timeout=5)
             return response.status_code == 200
         except:
             return False
@@ -237,7 +241,7 @@ class OllamaSummarizer(Summarizer):
             }
 
             with requests.post(
-                f"http://{self.host}:11434/api/generate",
+                f"{self.scheme}://{self.host}:{self.port}/api/generate",
                 json=payload,
                 stream=True,
                 timeout=self.timeout
@@ -262,11 +266,11 @@ class OllamaSummarizer(Summarizer):
                 )
 
         except requests.exceptions.ConnectionError as e:
-            error_msg = f"❌ Cannot connect to Ollama server at {self.host}:11434. Please ensure Ollama is running."
+            error_msg = f"❌ Cannot connect to Ollama server at {self.host}:{self.port}. Please ensure Ollama is running."
             print(error_msg)
             return SummarizerResult(success=False, error=error_msg)
         except requests.exceptions.Timeout as e:
-            error_msg = f"⏰ Timeout connecting to Ollama server at {self.host}:11434 (timeout: {self.timeout}s)"
+            error_msg = f"⏰ Timeout connecting to Ollama server at {self.host}:{self.port} (timeout: {self.timeout}s)"
             print(error_msg)
             return SummarizerResult(success=False, error=error_msg)
         except requests.exceptions.HTTPError as e:
