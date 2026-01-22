@@ -166,25 +166,8 @@ else
         echo "$DEFAULT_SETTINGS" | grep -A 50 '"sources"' | grep -B 50 '"interval"' > "/app/$SOURCES_FILE"
     else
         # Create default sources.txt
-        cat > "/app/$SOURCES_FILE" << 'EOF'
-# News Sources Configuration
-# You can organize sources into groups that send to different output channels
-
-[telegram-news]
-# General news sources for Telegram
-https://feeds.bbci.co.uk/news/rss.xml
-https://rss.cnn.com/rss/edition.rss
-
-[discord-tech:discord]
-# Technology news for Discord
-https://feeds.feedburner.com/TechCrunch/
-https://www.reddit.com/technology/.rss
-
-[all-channels]
-# Sources that go to all configured channels
-https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml
-EOF
-fi
+        cp /app/sources.example.txt "/app/$SOURCES_FILE"
+    fi
 
 echo "✅ Using ONLY sources file: /app/$SOURCES_FILE (from $WORK_DIR)"
 
@@ -192,5 +175,5 @@ chown 1000:1000 /app/settings.json
 
 echo "✅ Configuration ready - NewsSnek is starting..."
 
-# Change to data directory and execute the main command
-cd "$WORK_DIR" && exec "$@"
+# Execute the main command
+"$@"
