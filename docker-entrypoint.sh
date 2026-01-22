@@ -21,7 +21,7 @@ if [ -d "$WORK_DIR" ] && ! touch $WORK_DIR/.test_write 2>/dev/null; then
 fi
 
 # Default settings.json content
-DEFAULT_SETTINGS=$(cat << 'EOF'
+DEFAULT_SETTINGS=$(cat << EOF
 {
   "summarizer": {
     "provider": "ollama",
@@ -50,8 +50,7 @@ DEFAULT_SETTINGS=$(cat << 'EOF'
   },
   "interval": 60
 }
-EOF
-)
+EOF)
 
 DEFAULT_SOURCES="# Add your RSS feeds and websites here
 # RSS feeds (automatically detected)
