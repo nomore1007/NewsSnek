@@ -1,4 +1,4 @@
-# News Reader
+# NewsSnek
 
 A sophisticated Python-based RSS feed reader and web scraper that summarizes articles using various AI models. Features multilingual support, multiple output channels (Telegram, Discord), and continuous monitoring capabilities.
 
