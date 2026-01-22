@@ -5,22 +5,7 @@
 
 set -e
 
-# Parse arguments for workdir
 WORK_DIR="/app/data"
-ARGS=()
-
-while [[ $# -gt 0 ]]; do
-  case $1 in
-    --workdir)
-      WORK_DIR="$2"
-      shift 2
-      ;;
-    *)
-      ARGS+=("$1")
-      shift
-      ;;
-  esac
-done
 
 echo "=== NewsSnek Entrypoint v$(cat /app/VERSION 2>/dev/null | grep VERSION | cut -d'=' -f2 || echo 'unknown') ==="
 
@@ -207,5 +192,5 @@ chown 1000:1000 /app/settings.json
 
 echo "✅ Configuration ready - NewsSnek is starting..."
 
-# Execute command (already running with appropriate permissions)
-exec "$@"
+# Change to data directory and execute the main command
+cd "$WORK_DIR" && exec "$@"
