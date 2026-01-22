@@ -119,12 +119,7 @@ https://www.youtube.com/feeds/videos.xml?channel_id=UC16niRr50-MSBwiO3YDb3RA
 echo "$DEFAULT_SETTINGS" > /app/settings.example.json
 echo "$DEFAULT_SOURCES" > /app/sources.example.txt
 
-# Copy to data directory if not exists (never overwrite user files)
-if [ ! -f "$WORK_DIR/settings.json" ]; then
-    echo "📝 Creating default settings.json..."
-    cp /app/settings.example.json $WORK_DIR/settings.json
-    chown 1000:1000 $WORK_DIR/settings.json
-fi
+# Note: User must mount or create settings.json and sources.txt in $WORK_DIR
 
 if [ ! -f "$WORK_DIR/sources.txt" ]; then
     echo "📝 Creating default sources.txt..."
@@ -177,3 +172,4 @@ echo "✅ Configuration ready - NewsSnek is starting..."
 
 # Execute the main command
 "$@"
+exit 0
