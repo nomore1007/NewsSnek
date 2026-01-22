@@ -3099,6 +3099,35 @@ if __name__ == "__main__":
     data_manager = DataManager(config)
     output_channels = config.get_output_channels()
 
+    # Setup timezone and overview scheduling
+    try:
+        import pytz
+    except ImportError:
+        pytz = None
+
+    timezone_str = config.settings.get('timezone', 'UTC')
+    if pytz and timezone_str != 'UTC':
+        tz = pytz.timezone(timezone_str)
+    else:
+        tz = datetime.timezone.utc
+        if timezone_str != 'UTC':
+            print(f"⚠️ Timezone '{timezone_str}' not supported without pytz, using UTC")
+
+    overview_interval_hours = config.settings.get('overview_interval_hours', 24)
+    overview_start = config.settings.get('overview_start_time', '04:00')
+    start_hour, start_min = map(int, overview_start.split(':'))
+
+    def get_next_overview_time():
+        now = datetime.now(tz)
+        today_start = now.replace(hour=start_hour, minute=start_min, second=0, microsecond=0)
+        if now >= today_start:
+            next_time = today_start + timedelta(hours=overview_interval_hours)
+        else:
+            next_time = today_start
+        return next_time
+
+    next_overview = get_next_overview_time()
+
     # Debug: Show loaded settings
     print(f"⚙️  Loaded settings from: {config.settings_file}")
     print(f"📋 Available output channels: {[type(ch).__name__ for ch in output_channels]}")
@@ -3339,6 +3368,9 @@ if __name__ == "__main__":
                 # Reload output channels in case settings changed
                 output_channels = config.get_output_channels()
                 print(f"📋 Reloaded output channels: {[type(ch).__name__ for ch in output_channels]}")
+
+                # Recalculate next overview time in case settings changed
+                next_overview = get_next_overview_time()
                 
                 # Reload sources in case settings or sources file changed
                 default_sources_file = settings.get('files', {}).get('sources', 'sources.txt')
