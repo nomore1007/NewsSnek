@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 
 # Entrypoint script for NewsSnek container
 # Handles configuration file management and volume mount permissions
