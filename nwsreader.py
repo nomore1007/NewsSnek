@@ -1103,8 +1103,30 @@ class DiscordOutputChannel(OutputChannel):
             self.auth_method = None
 
     def is_available(self) -> bool:
-        """Check if Discord is properly configured."""
-        return self.auth_method is not None
+        """Check if Discord is properly configured and connected."""
+        if self.auth_method is None:
+            return False
+
+        if self.auth_method == 'bot':
+            # Test bot token by getting user info
+            try:
+                response = requests.get("https://discord.com/api/v10/users/@me",
+                                      headers={'Authorization': f'Bot {self.bot_token}'},
+                                      timeout=10)
+                if response.status_code == 200:
+                    # Optionally check channel access
+                    channel_response = requests.get(f"https://discord.com/api/v10/channels/{self.channel_id}",
+                                                   headers={'Authorization': f'Bot {self.bot_token}'},
+                                                   timeout=10)
+                    return channel_response.status_code == 200
+                return False
+            except Exception:
+                return False
+        elif self.auth_method == 'webhook':
+            # For webhook, just check if URL is set (can't test without posting)
+            return bool(self.webhook_url)
+
+        return False
 
     def send_summary(self, title: str, summary: str, source: str = "", category: str = "") -> OutputChannelResult:
         """
@@ -3065,18 +3087,6 @@ if __name__ == "__main__":
     print(f"⚙️  Loaded settings from: {config.settings_file}")
     print(f"📋 Available output channels: {[type(ch).__name__ for ch in output_channels]}")
 
-    # Test channels if requested
-    if args.test_channels:
-        print("🧪 Testing output channels...")
-        for channel in output_channels:
-            try:
-                channel.send("🧪 Test message from NewsSnek", "Test Message")
-                print(f"✅ Test sent to {type(channel).__name__}")
-            except Exception as e:
-                print(f"❌ Test failed for {type(channel).__name__}: {e}")
-        print("🧪 Channel testing complete.")
-        return  # Exit after testing
-
     files_section = settings.get('files', {})
     sources_file = files_section.get('sources', 'sources.txt')
     print(f"📁 Sources file from settings: {sources_file}")
@@ -3110,7 +3120,6 @@ if __name__ == "__main__":
     parser.add_argument("--article-prompt", default=settings.get("prompts", {}).get("article_summary", "Summarize this article briefly:"), help="Custom prompt for article summarization")
     parser.add_argument("--overview-prompt", default=settings.get("prompts", {}).get("overview_summary", "Based on the following news summaries, provide a comprehensive overview..."), help="Custom prompt for overview generation")
     parser.add_argument("--interval", "-i", type=int, help="Run in a loop with specified interval in minutes (for continuous monitoring)")
-    parser.add_argument("--test-channels", action="store_true", help="Send test messages to all configured output channels")
     args = parser.parse_args()
 
     # Change to working directory
