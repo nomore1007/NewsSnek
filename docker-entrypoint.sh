@@ -21,37 +21,21 @@ if [ -d "$WORK_DIR" ] && ! touch $WORK_DIR/.test_write 2>/dev/null; then
 fi
 
 # Default settings.json content
-DEFAULT_SETTINGS=$(cat << 'EOF'
-{
-  "summarizer": {
-    "provider": "ollama",
-    "config": {
-      "host": "http://localhost:11434",
-      "model": "smollm2:135m",
-      "timeout": 120,
-      "preferred_language": "en"
-    }
-  },
-  "processing": {
-    "max_overview_summaries": 50,
-    "scrape_timeout": 30,
-    "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-  },
-  "prompts": {
-    "article_summary": "Summarize this article briefly:",
-    "overview_summary": "Based on the following news summaries, provide a comprehensive overview..."
-  },
-  "files": {
-    "sources": "sources.txt",
-    "database": "news_reader.db"
-  },
-  "output": {
-    "groups": {}
-  },
-  "interval": 60
-}
-EOF
-)
+DEFAULT_SETTINGS='{"summarizer":{"provider":"ollama","config":{"host":"http://localhost:11434","model":"smollm2:135m","timeout":120,"preferred_language":"en"}},"processing":{"max_overview_summaries":50,"scrape_timeout":30,"user_agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"},"prompts":{"article_summary":"Summarize this article briefly:","overview_summary":"Based on the following news summaries, provide a comprehensive overview..."},"files":{"sources":"sources.txt","database":"news_reader.db"},"output":{"groups":{}},"interval":60}'
+
+DEFAULT_SOURCES="# Add your RSS feeds and websites here
+# RSS feeds (automatically detected)
+https://feeds.bbci.co.uk/news/rss.xml
+https://rss.cnn.com/rss/edition.rss
+https://feeds.npr.org/1001/rss.xml
+https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml
+
+# YouTube RSS feeds
+https://www.youtube.com/feeds/videos.xml?channel_id=UCupvZG-5ko_eiXAupbDfxWw
+https://www.youtube.com/feeds/videos.xml?channel_id=UC16niRr50-MSBwiO3YDb3RA
+
+# Websites for scraping (all channels)
+# https://example.com/news"
 
 # Default sources.txt content
 DEFAULT_SOURCES=$(cat << 'EOF'
