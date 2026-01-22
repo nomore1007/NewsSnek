@@ -113,16 +113,20 @@ https://www.youtube.com/feeds/videos.xml?channel_id=UC16niRr50-MSBwiO3YDb3RA
 # Websites for scraping (automatically detected)
 # https://example.com/news'
 
-# Create or use existing configuration files
+# Create example files in /app
+echo "$DEFAULT_SETTINGS" > /app/settings.example.json
+echo "$DEFAULT_SOURCES" > /app/sources.example.txt
+
+# Copy to data directory if not exists (never overwrite user files)
 if [ ! -f "/app/data/settings.json" ]; then
     echo "📝 Creating default settings.json..."
-    echo "$DEFAULT_SETTINGS" > /app/data/settings.json
+    cp /app/settings.example.json /app/data/settings.json
     chown 1000:1000 /app/data/settings.json
 fi
 
 if [ ! -f "/app/data/sources.txt" ]; then
     echo "📝 Creating default sources.txt..."
-    echo "$DEFAULT_SOURCES" > /app/data/sources.txt
+    cp /app/sources.example.txt /app/data/sources.txt
     chown 1000:1000 /app/data/sources.txt
 fi
 
