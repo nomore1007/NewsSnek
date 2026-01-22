@@ -81,7 +81,7 @@ else
 fi
 
 # Read sources file setting from mounted settings and ensure only that file is used
-SOURCES_FILE=$(grep -o '"sources":\s*"[^"]*"' $WORK_DIR/settings.json 2>/dev/null | cut -d'"' -f4)
+SOURCES_FILE=$(grep -o '"sources":[[:space:]]*"[^"]*"' $WORK_DIR/settings.json 2>/dev/null | cut -d'"' -f4)
 if [ -z "$SOURCES_FILE" ]; then
     SOURCES_FILE="sources.txt"
 fi
