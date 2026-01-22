@@ -7,7 +7,7 @@ set -e
 
 WORK_DIR="/app/data"
 
-echo "=== NewsSnek Entrypoint v$(cat /app/VERSION 2>/dev/null | grep VERSION | cut -d'=' -f2 || echo 'unknown') ==="
+echo "=== NewsSnek Entrypoint ==="
 
 # Ensure data directory exists and has correct permissions
 mkdir -p "$WORK_DIR"
@@ -21,7 +21,8 @@ if [ -d "$WORK_DIR" ] && ! touch $WORK_DIR/.test_write 2>/dev/null; then
 fi
 
 # Default settings.json content
-DEFAULT_SETTINGS='{
+DEFAULT_SETTINGS=$(cat << 'EOF'
+{
   "summarizer": {
     "provider": "ollama",
     "config": {
@@ -40,68 +41,21 @@ DEFAULT_SETTINGS='{
     "article_summary": "Summarize this article briefly:",
     "overview_summary": "Based on the following news summaries, provide a comprehensive overview..."
   },
-   "files": {
-     "sources": "sources.txt",
-     "database": "news_reader.db"
-    },
-   "sources": {
-     "groups": {
-       "general-news": {
-         "description": "General news sources for all channels",
-         "channels": [],
-         "prompt": null,
-         "sources": [
-           "https://feeds.bbci.co.uk/news/rss.xml",
-           "https://rss.cnn.com/rss/edition.rss"
-         ]
-       },
-       "tech-news": {
-         "description": "Technology news for Discord",
-         "channels": ["discord"],
-         "prompt": null,
-         "sources": [
-           "https://feeds.feedburner.com/TechCrunch/",
-           "https://www.reddit.com/r/technology/.rss"
-         ]
-       }
-     }
-   },
+  "files": {
+    "sources": "sources.txt",
+    "database": "news_reader.db"
+  },
   "output": {
-    "groups": {
-      "console": {
-        "console": {
-          "output_file": null
-        }
-      },
-      "tech": {
-        "telegram": {
-          "bot_token": "your-telegram-bot-token",
-          "chat_id": "your-chat-id"
-        },
-        "discord": {
-          "webhook_url": "https://discord.com/api/webhooks/...",
-          "username": "News Reader",
-          "avatar_url": "https://example.com/avatar.png"
-        }
-      },
-      "news": {
-        "telegram": {
-          "bot_token": "your-telegram-bot-token",
-          "chat_id": "your-chat-id"
-        },
-        "discord": {
-          "webhook_url": "https://discord.com/api/webhooks/...",
-          "username": "News Reader",
-          "avatar_url": "https://example.com/avatar.png"
-        }
-      }
-    }
+    "groups": {}
   },
   "interval": 60
-}'
+}
+EOF
+)
 
 # Default sources.txt content
-DEFAULT_SOURCES='# Add your RSS feeds and websites here
+DEFAULT_SOURCES=$(cat << 'EOF'
+# Add your RSS feeds and websites here
 # RSS feeds (automatically detected)
 https://feeds.bbci.co.uk/news/rss.xml
 https://rss.cnn.com/rss/edition.rss
@@ -113,7 +67,9 @@ https://www.youtube.com/feeds/videos.xml?channel_id=UCupvZG-5ko_eiXAupbDfxWw
 https://www.youtube.com/feeds/videos.xml?channel_id=UC16niRr50-MSBwiO3YDb3RA
 
 # Websites for scraping (automatically detected)
-# https://example.com/news'
+# https://example.com/news
+EOF
+)
 
 # Create example files in working directory
 echo "$DEFAULT_SETTINGS" > "$WORK_DIR/settings.example.json"
@@ -170,4 +126,5 @@ echo "✅ Configuration ready - NewsSnek is starting..."
 
 # Execute the main command
 "$@"
-exit 0
+
+# End of script
