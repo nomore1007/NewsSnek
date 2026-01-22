@@ -1,7 +1,7 @@
 #!/bin/sh
 set -e
 
-WORK_DIR="/app"
+WORK_DIR="/app/data"
 
 echo "=== NewsSnek Entrypoint ==="
 

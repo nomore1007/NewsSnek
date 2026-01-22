@@ -34,7 +34,7 @@ import sqlite3
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin, urlparse, quote
 from typing import Dict, List, Tuple, Optional, Protocol, Any
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from abc import ABC, abstractmethod
 try:
     from youtube_transcript_api import YouTubeTranscriptApi
@@ -3109,7 +3109,7 @@ if __name__ == "__main__":
     if pytz and timezone_str != 'UTC':
         tz = pytz.timezone(timezone_str)
     else:
-        tz = datetime.timezone.utc
+        tz = timezone.utc
         if timezone_str != 'UTC':
             print(f"⚠️ Timezone '{timezone_str}' not supported without pytz, using UTC")
 
