@@ -115,9 +115,9 @@ https://www.youtube.com/feeds/videos.xml?channel_id=UC16niRr50-MSBwiO3YDb3RA
 # Websites for scraping (automatically detected)
 # https://example.com/news'
 
-# Create example files in /app
-echo "$DEFAULT_SETTINGS" > /app/settings.example.json
-echo "$DEFAULT_SOURCES" > /app/sources.example.txt
+# Create example files in working directory
+echo "$DEFAULT_SETTINGS" > "$WORK_DIR/settings.example.json"
+echo "$DEFAULT_SOURCES" > "$WORK_DIR/sources.example.txt"
 
 # Note: User must mount or create settings.json and sources.txt in $WORK_DIR
 
@@ -165,8 +165,6 @@ else
     fi
 
 echo "✅ Using ONLY sources file: /app/$SOURCES_FILE (from $WORK_DIR)"
-
-chown 1000:1000 /app/settings.json
 
 echo "✅ Configuration ready - NewsSnek is starting..."
 
