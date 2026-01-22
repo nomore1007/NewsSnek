@@ -5,6 +5,23 @@
 
 set -e
 
+# Parse arguments for workdir
+WORK_DIR="/app/data"
+ARGS=()
+
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    --workdir)
+      WORK_DIR="$2"
+      shift 2
+      ;;
+    *)
+      ARGS+=("$1")
+      shift
+      ;;
+  esac
+done
+
 echo "=== NewsSnek Entrypoint v$(cat /app/VERSION 2>/dev/null | grep VERSION | cut -d'=' -f2 || echo 'unknown') ==="
 
 # Ensure data directory exists and has correct permissions
