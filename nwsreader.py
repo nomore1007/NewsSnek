@@ -3218,6 +3218,11 @@ if __name__ == "__main__":
             url_prompt_map[url] = None
 
     for url in urls:
+        # Ensure URL is a string to prevent type errors
+        if not isinstance(url, str):
+            print(f"Warning: Skipping invalid URL type {type(url)}: {url}")
+            continue
+
         # Check if source should be excluded due to excessive failures
         if should_exclude_source(url, error_tracking):
             print(f"🚫 Skipping unreliable source: {url}")
