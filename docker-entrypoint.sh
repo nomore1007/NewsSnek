@@ -64,37 +64,37 @@ DEFAULT_SETTINGS='{
        }
      }
    },
-  "output": [
-    {
-      "type": "console",
-      "config": {
-        "output_file": null
-      }
-    },
-    {
-      "type": "telegram",
-      "config": {
-        "bot_token": "your-telegram-bot-token",
-        "chat_id": "your-chat-id"
-      }
-    },
-    {
-      "type": "discord",
-      "config": {
-        "webhook_url": "https://discord.com/api/webhooks/...",
-        "username": "News Reader",
-        "avatar_url": "https://example.com/avatar.png"
-      }
-    },
-    {
-      "type": "discord",
-      "config": {
-        "bot_token": "your-discord-bot-token",
-        "channel_id": "your-channel-id",
-        "username": "News Reader"
+  "output": {
+    "groups": {
+      "console": {
+        "console": {
+          "output_file": null
+        }
+      },
+      "tech": {
+        "telegram": {
+          "bot_token": "your-telegram-bot-token",
+          "chat_id": "your-chat-id"
+        },
+        "discord": {
+          "webhook_url": "https://discord.com/api/webhooks/...",
+          "username": "News Reader",
+          "avatar_url": "https://example.com/avatar.png"
+        }
+      },
+      "news": {
+        "telegram": {
+          "bot_token": "your-telegram-bot-token",
+          "chat_id": "your-chat-id"
+        },
+        "discord": {
+          "webhook_url": "https://discord.com/api/webhooks/...",
+          "username": "News Reader",
+          "avatar_url": "https://example.com/avatar.png"
+        }
       }
     }
-  ],
+  },
   "interval": 60
 }'
 

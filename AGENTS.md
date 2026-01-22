@@ -27,6 +27,38 @@ To convert `sources.txt` to `sources.json` format:
 python3 migrate_sources.py
 ```
 
+## Output Configuration
+
+Configure output channel groups in `settings.json` under `"output"."groups"`. Each group is a collection of channel configurations:
+
+```json
+{
+  "output": {
+    "groups": {
+      "tech": {
+        "telegram": {
+          "bot_token": "your-telegram-bot-token",
+          "chat_id": "your-chat-id"
+        },
+        "discord": {
+          "webhook_url": "https://discord.com/api/webhooks/...",
+          "username": "Tech News"
+        }
+      },
+      "news": {
+        "console": {
+          "output_file": null
+        }
+      }
+    }
+  }
+}
+```
+
+In sources files, reference group names to send summaries to all channels in that group:
+- Text format: `[tech] https://example.com/rss`
+- JSON format: `"channels": ["tech"]`
+
 ### Error Handling
 The application provides clear error messages when issues occur:
 - **JSON parsing errors**: Specific error messages with troubleshooting tips

@@ -81,7 +81,43 @@ A sophisticated Python-based RSS feed reader and web scraper that summarizes art
 }
 ```
 
-### Output Channels
+### Output Groups
+
+Configure output channel groups in `settings.json` under `"output" > "groups"`. Each group contains channel configurations directly:
+
+```json
+{
+  "output": {
+    "groups": {
+      "tech": {
+        "telegram": {
+          "bot_token": "your-telegram-bot-token",
+          "chat_id": "your-chat-id"
+        },
+        "discord": {
+          "webhook_url": "https://discord.com/api/webhooks/...",
+          "username": "Tech News"
+        }
+      },
+      "news": {
+        "telegram": {
+          "bot_token": "your-telegram-bot-token",
+          "chat_id": "your-chat-id"
+        },
+        "discord": {
+          "webhook_url": "https://discord.com/api/webhooks/...",
+          "username": "News Reader"
+        }
+      },
+      "console": {
+        "console": {
+          "output_file": null
+        }
+      }
+    }
+  }
+}
+```
 
 - **Console**: Print to terminal or file
 - **Telegram**: Send summaries to Telegram chats
@@ -95,17 +131,7 @@ Discord supports two authentication methods:
 1. Go to your Discord server settings
 2. Navigate to Integrations → Webhooks
 3. Create a new webhook and copy the URL
-4. Configure in `settings.json`:
-```json
-{
-  "type": "discord",
-  "config": {
-    "webhook_url": "https://discord.com/api/webhooks/...",
-    "username": "News Reader",
-    "avatar_url": "https://example.com/avatar.png"
-  }
-}
-```
+4. Configure as above with `"webhook_url"`
 
 **Bot Token Method** (more powerful, allows reading messages):
 1. Go to [Discord Developer Portal](https://discord.com/developers/applications)
@@ -113,17 +139,9 @@ Discord supports two authentication methods:
 3. Copy the bot token from the "Bot" section
 4. Invite the bot to your server with appropriate permissions
 5. Get the channel ID (enable Developer Mode in Discord, right-click channel → Copy ID)
-6. Configure in `settings.json`:
-```json
-{
-  "type": "discord",
-  "config": {
-    "bot_token": "your-discord-bot-token",
-    "channel_id": "your-channel-id",
-    "username": "News Reader"
-  }
-}
-```
+6. Configure as above with `"bot_token"` and `"channel_id"`
+
+Then reference groups in sources: `"channels": ["tech"]` or in text: `[tech] https://example.com/rss`
 
 ### Source Groups and Channel Routing
 

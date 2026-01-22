@@ -531,29 +531,39 @@ class NewsReaderConfig:
     def _get_output_channels_named(self, output_settings: Dict, channel_names: Optional[List[str]] = None) -> List[Any]:
         """Get output channels from named channels format."""
         channels = []
+        groups = output_settings.get('groups', {})
 
-        # If no specific channel names requested, get all channels
+        # If no specific channel names requested, get all channels from all groups
         if channel_names is None:
-            channel_names = list(output_settings.get('channels', {}).keys())
+            for group_name, group in groups.items():
+                for sub_type, config in group.items():
+                    channel_type = sub_type
+                    channel_config = config
+                    self._create_channel(channels, sub_type, channel_config)
+            return channels
 
         for channel_name in channel_names:
-            channel_config = output_settings.get('channels', {}).get(channel_name)
-            if channel_config:
-                channel_type = channel_config.get('type')
-                if channel_type:
-                    config = OutputChannelConfig(channel_type, **channel_config.get('config', {}))
-                    try:
-                        channel = OutputChannelFactory.create_channel(config)
-                        if channel.is_available():
-                            channels.append(channel)
-                        else:
-                            print(f"Warning: Output channel '{channel_name}' ({channel_type}) not available (not configured)")
-                    except ValueError as e:
-                        print(f"Warning: {e}")
+            if channel_name in groups:
+                group = groups[channel_name]
+                for sub_type, config in group.items():
+                    self._create_channel(channels, sub_type, config)
             else:
-                print(f"Warning: Output channel '{channel_name}' not found in configuration")
+                print(f"Warning: Output group '{channel_name}' not found in configuration")
 
         return channels
+
+    def _create_channel(self, channels, channel_type, channel_config):
+        """Helper to create and add a channel."""
+        if channel_type:
+            config = OutputChannelConfig(channel_type, **channel_config)
+            try:
+                channel = OutputChannelFactory.create_channel(config)
+                if channel.is_available():
+                    channels.append(channel)
+                else:
+                    print(f"Warning: Output channel '{channel_type}' not available (not configured)")
+            except ValueError as e:
+                print(f"Warning: {e}")
 
     def get_interval(self) -> int:
         """Get the run interval in minutes from settings or environment."""

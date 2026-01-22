@@ -20,39 +20,36 @@
     "database": "news_reader.db"
   },
   "output": {
-    "channels": {
+    "groups": {
       "console": {
-        "type": "console",
-        "config": {
+        "console": {
           "output_file": null
         }
       },
-      "discord-main": {
-        "type": "discord_webhook",
-        "config": {
-          "webhook_url": "https://discord.com/api/webhooks/YOUR_MAIN_WEBHOOK",
-          "username": "News Reader",
-          "avatar_url": "https://example.com/avatar.png"
-        }
-      },
-      "discord-tech": {
-        "type": "discord_webhook", 
-        "config": {
+      "tech": {
+        "telegram": {
+          "bot_token": "your-telegram-bot-token",
+          "chat_id": "your-chat-id"
+        },
+        "discord": {
           "webhook_url": "https://discord.com/api/webhooks/YOUR_TECH_WEBHOOK",
           "username": "Tech News",
           "avatar_url": "https://example.com/tech-avatar.png"
         }
       },
-      "telegram-bot": {
-        "type": "telegram",
-        "config": {
+      "news": {
+        "telegram": {
           "bot_token": "your-telegram-bot-token",
           "chat_id": "your-chat-id"
+        },
+        "discord": {
+          "webhook_url": "https://discord.com/api/webhooks/YOUR_MAIN_WEBHOOK",
+          "username": "News Reader",
+          "avatar_url": "https://example.com/avatar.png"
         }
       },
-      "urgent-alerts": {
-        "type": "discord_webhook",
-        "config": {
+      "urgent": {
+        "discord": {
           "webhook_url": "https://discord.com/api/webhooks/YOUR_URGENT_WEBHOOK",
           "username": "🚨 Urgent News",
           "avatar_url": "https://example.com/alert.png"
@@ -60,5 +57,6 @@
       }
     }
   },
+  "groups": {},
   "interval": 60
 }
