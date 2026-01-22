@@ -345,16 +345,15 @@ https://rss.cnn.com/rss/edition.rss
    The container will automatically create `sources.json` with default news sources and run in continuous mode, processing feeds every 60 minutes.
 
 4. **Portainer Stack**
-   ```yaml
-   services:
-     news-reader:
-       image: news-reader:latest
-       volumes:
-         - /opt/newsnek:/app/data
-       environment:
-         - INTERVAL=60  # Optional: override settings.json interval
-       restart: unless-stopped
-   ```
+    ```yaml
+    services:
+      news-reader:
+        image: news-reader:latest
+        volumes:
+          - /path/to/data:/app/data
+        command: ["python3", "nwsreader.py", "--workdir", "/app/data", "--overview", "--interval", "60"]
+        restart: unless-stopped
+    ```
 
    **Note**: This deployment does not include an Ollama server. You must have Ollama running separately and configured in your `settings.json` file.
 

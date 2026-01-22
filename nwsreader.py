@@ -3082,8 +3082,9 @@ if __name__ == "__main__":
     default_summaries_file = settings.get("files", {}).get("summaries", "summaries.json")
 
     parser = argparse.ArgumentParser(description="Summarize RSS feeds or scrape websites using a remote Ollama model.")
+    parser.add_argument("--workdir", default=os.getcwd(), help="Working directory for config files")
     parser.add_argument("--url", "-u", help="Single RSS feed URL or website URL")
-    parser.add_argument("--file", "-f", default=f"/app/data/{default_sources_file}", help=f"File containing mixed source URLs (default: /app/data/{default_sources_file})")
+    parser.add_argument("--file", "-f", default=default_sources_file, help=f"File containing mixed source URLs (default: {default_sources_file})")
     parser.add_argument("--scrape", "-s", action="store_true", help="Force all URLs to be treated as websites to scrape")
     parser.add_argument("--overview", action="store_true", help="Generate a consolidated overview of all summaries (state of the world)")
     parser.add_argument("--migrate", action="store_true", help="Migrate data from JSON files to SQLite database")
@@ -3098,6 +3099,11 @@ if __name__ == "__main__":
     parser.add_argument("--overview-prompt", default=settings.get("prompts", {}).get("overview_summary", "Based on the following news summaries, provide a comprehensive overview..."), help="Custom prompt for overview generation")
     parser.add_argument("--interval", "-i", type=int, help="Run in a loop with specified interval in minutes (for continuous monitoring)")
     args = parser.parse_args()
+
+    # Change to working directory
+    workdir = args.workdir
+    os.chdir(workdir)
+    print(f"📁 Working directory: {workdir}")
 
     # Show startup information
     if args.interval:
