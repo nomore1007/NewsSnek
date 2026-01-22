@@ -3080,17 +3080,20 @@ def process_single_article(url: str, title: str, content: str, summarizer: Summa
     save_summaries_to_db(summaries, "news_reader.db")
 
 if __name__ == "__main__":
-    # Load settings and initialize new architecture components
-    config = NewsReaderConfig("/app/data/settings.json")
-    settings = config.settings  # Keep backward compatibility
+    # Parse arguments first to get workdir
+    parser = argparse.ArgumentParser(description="Summarize RSS feeds or scrape websites using a remote Ollama model.")
+    parser.add_argument("--workdir", default=os.getcwd(), help="Working directory for config files")
+    args, remaining = parser.parse_known_args()
 
-    # Log current database status
-    try:
-        summaries = load_summaries_from_db("news_reader.db")
-        total_articles = sum(len(articles) for articles in summaries.values())
-        print(f"📊 Database status: {total_articles} summarized articles from {len(summaries)} sources")
-    except Exception as e:
-        print(f"⚠️ Could not read database status: {e}")
+    # Change to working directory
+    workdir = args.workdir
+    os.chdir(workdir)
+
+    print(f"📁 Working directory: {workdir}")
+
+    # Load settings and initialize new architecture components
+    config = NewsReaderConfig("settings.json")
+    settings = config.settings  # Keep backward compatibility
 
     # Initialize new architecture components
     summarizer_config = config.get_summarizer_config()
@@ -3098,6 +3101,42 @@ if __name__ == "__main__":
     content_extractor = ContentExtractor(config)
     data_manager = DataManager(config)
     output_channels = config.get_output_channels()
+
+    # Debug: Show loaded settings
+    print(f"⚙️  Loaded settings from: {config.settings_file}")
+    print(f"📋 Available output channels: {[type(ch).__name__ for ch in output_channels]}")
+
+    files_section = settings.get('files', {})
+    sources_file = files_section.get('sources', 'sources.txt')
+    print(f"📁 Sources file from settings: {sources_file}")
+    ollama_config = settings.get('summarizer', {}).get('config', {})
+    print(f"🤖 Ollama host: {ollama_config.get('host', 'localhost')}")
+    print(f"🧠 Ollama model: {ollama_config.get('model', 'smollm2:135m')}")
+
+    # Now parse the full arguments
+    default_sources_file = settings.get("files", {}).get("sources", "sources.txt")
+    default_summaries_file = settings.get("files", {}).get("summaries", "summaries.json")
+    default_model = settings.get('summarizer', {}).get('config', {}).get('model', 'smollm2:135m')
+    default_host = settings.get('summarizer', {}).get('config', {}).get('host', 'http://localhost:11434')
+    default_timeout = settings.get('summarizer', {}).get('config', {}).get('timeout', 120)
+    overview_model_default = settings.get('summarizer', {}).get('config', {}).get('overview_model', default_model)
+
+    parser = argparse.ArgumentParser(description="Summarize RSS feeds or scrape websites using a remote Ollama model.")
+    parser.add_argument("--url", "-u", help="Single RSS feed URL or website URL")
+    parser.add_argument("--file", "-f", default=default_sources_file, help=f"File containing mixed source URLs (default: {default_sources_file})")
+    parser.add_argument("--scrape", "-s", action="store_true", help="Force all URLs to be treated as websites to scrape")
+    parser.add_argument("--overview", action="store_true", help="Generate a consolidated overview of all summaries (state of the world)")
+    parser.add_argument("--migrate", action="store_true", help="Migrate data from JSON files to SQLite database")
+    parser.add_argument("--export-overview", action="store_true", help="Export latest overview to file for Home Assistant TTS")
+    parser.add_argument("--model", "-m", default=default_model, help=f"Model name on Ollama host (default: {default_model})")
+    parser.add_argument("--overview-model", default=overview_model_default, help=f"Model for overview generation (default: {overview_model_default})")
+    parser.add_argument("--host", "-H", default=default_host, help=f"Ollama host IP or hostname (default: {default_host})")
+    parser.add_argument("--timeout", "-t", type=int, default=default_timeout, help=f"Timeout for requests (default: {default_timeout})")
+    parser.add_argument("--output", "-o", default=default_summaries_file, help=f"Path to output file (default: {default_summaries_file})")
+    parser.add_argument("--article-prompt", default=settings.get("prompts", {}).get("article_summary", "Summarize this article briefly:"), help="Custom prompt for article summarization")
+    parser.add_argument("--overview-prompt", default=settings.get("prompts", {}).get("overview_summary", "Based on the following news summaries, provide a comprehensive overview..."), help="Custom prompt for overview generation")
+    parser.add_argument("--interval", "-i", type=int, help="Run in a loop with specified interval in minutes (for continuous monitoring)")
+    args = parser.parse_args(remaining)
 
     # Setup timezone and overview scheduling
     try:
@@ -3126,57 +3165,13 @@ if __name__ == "__main__":
             next_time = today_start
         return next_time
 
-    next_overview = get_next_overview_time()
-
-    # Debug: Show loaded settings
-    print(f"⚙️  Loaded settings from: {config.settings_file}")
-    print(f"📋 Available output channels: {[type(ch).__name__ for ch in output_channels]}")
-
-    files_section = settings.get('files', {})
-    sources_file = files_section.get('sources', 'sources.txt')
-    print(f"📁 Sources file from settings: {sources_file}")
-    print(f"🤖 Ollama host: {settings.get('ollama', {}).get('host', 'localhost')}")
-    print(f"🧠 Ollama model: {settings.get('ollama', {}).get('model', 'smollm2:135m')}")
-    
-    # Debug: Show full files section
-    print(f"📄 Full files section from settings: {files_section}")
-
-    # Set defaults from settings (backward compatibility) with safe access
-    default_host = settings.get("ollama", {}).get("host", "localhost")
-    default_model = settings.get("ollama", {}).get("model", "smollm2:135m")
-    default_timeout = settings.get("ollama", {}).get("timeout", 120)
-    default_sources_file = settings.get("files", {}).get("sources", "sources.txt")
-    default_summaries_file = settings.get("files", {}).get("summaries", "summaries.json")
-
-    parser = argparse.ArgumentParser(description="Summarize RSS feeds or scrape websites using a remote Ollama model.")
-    parser.add_argument("--workdir", default=os.getcwd(), help="Working directory for config files")
-    parser.add_argument("--url", "-u", help="Single RSS feed URL or website URL")
-    parser.add_argument("--file", "-f", default=default_sources_file, help=f"File containing mixed source URLs (default: {default_sources_file})")
-    parser.add_argument("--scrape", "-s", action="store_true", help="Force all URLs to be treated as websites to scrape")
-    parser.add_argument("--overview", action="store_true", help="Generate a consolidated overview of all summaries (state of the world)")
-    parser.add_argument("--migrate", action="store_true", help="Migrate data from JSON files to SQLite database")
-    parser.add_argument("--export-overview", action="store_true", help="Export latest overview to file for Home Assistant TTS")
-    parser.add_argument("--model", "-m", default=default_model, help=f"Model name on Ollama host (default: {default_model})")
-    overview_model_default = settings.get("ollama", {}).get("overview_model", "llama2")
-    parser.add_argument("--overview-model", default=overview_model_default, help=f"Model for overview generation (default: {overview_model_default})")
-    parser.add_argument("--host", "-H", default=default_host, help=f"Ollama host IP or hostname (default: {default_host})")
-    parser.add_argument("--timeout", "-t", type=int, default=default_timeout, help=f"Timeout for requests (default: {default_timeout})")
-    parser.add_argument("--output", "-o", default=default_summaries_file, help=f"Path to output file (default: {default_summaries_file})")
-    parser.add_argument("--article-prompt", default=settings.get("prompts", {}).get("article_summary", "Summarize this article briefly:"), help="Custom prompt for article summarization")
-    parser.add_argument("--overview-prompt", default=settings.get("prompts", {}).get("overview_summary", "Based on the following news summaries, provide a comprehensive overview..."), help="Custom prompt for overview generation")
-    parser.add_argument("--interval", "-i", type=int, help="Run in a loop with specified interval in minutes (for continuous monitoring)")
-    args = parser.parse_args()
-
-    # Change to working directory
-    workdir = args.workdir
-    os.chdir(workdir)
-    print(f"📁 Working directory: {workdir}")
-
-    # Show startup information
-    if args.interval:
-        print(f"🔄 Starting NewsSnek in continuous mode (interval: {args.interval} minutes)")
-    else:
-        print("🔄 Starting NewsSnek in single-run mode")
+    # Log current database status
+    try:
+        summaries = load_summaries_from_db("news_reader.db")
+        total_articles = sum(len(articles) for articles in summaries.values())
+        print(f"📊 Database status: {total_articles} summarized articles from {len(summaries)} sources")
+    except Exception as e:
+        print(f"⚠️ Could not read database status: {e}")
 
     # Handle migration if requested
     if args.migrate:
