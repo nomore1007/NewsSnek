@@ -1,0 +1,47 @@
+{
+  "ollama": {
+    "host": "http://localhost:11434",
+    "model": "smollm2:135m",
+    "overview_model": "llama2",
+    "timeout": 120
+  },
+  "processing": {
+    "max_overview_summaries": 50,
+    "scrape_timeout": 30,
+    "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+  },
+  "prompts": {
+    "article_summary": "Summarize this article briefly:",
+    "overview_summary": "Based on the following news summaries, provide a comprehensive overview..."
+  },
+  "files": {
+    "sources": "sources.json",
+    "summaries": "summaries.json",
+    "database": "news_reader.db"
+  },
+  "output": {
+    "channels": {
+      "discord-main": {
+        "type": "discord",
+        "config": {
+          "bot_token": "YOUR_DISCORD_BOT_TOKEN",
+          "channel_id": "YOUR_CHANNEL_ID"
+        }
+      },
+      "telegram-news": {
+        "type": "telegram",
+        "config": {
+          "bot_token": "YOUR_TELEGRAM_BOT_TOKEN",
+          "chat_id": "YOUR_CHAT_ID"
+        }
+      },
+      "console": {
+        "type": "console",
+        "config": {
+          "output_file": null
+        }
+      }
+    }
+  },
+  "interval": 60
+}

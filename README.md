@@ -106,13 +106,46 @@ For advanced source management, use `sources.json` with structured groups:
 
 ```json
 {
-  "groups": {
-    "general-news": {
-      "description": "General news sources for all configured channels",
-      "channels": [],
-      "prompt": null,
-      "sources": [
-        "https://feeds.bbci.co.uk/news/rss.xml",
+  "ollama": {
+    "host": "http://localhost:11434",
+    "model": "smollm2:135m",
+    "overview_model": "llama2",
+    "timeout": 120
+  },
+  "files": {
+    "sources": "sources.json",
+    "summaries": "summaries.json",
+    "database": "news_reader.db"
+  },
+  "output": {
+    "channels": {
+      "discord-main": {
+        "type": "discord",
+        "config": {
+          "bot_token": "YOUR_DISCORD_BOT_TOKEN",
+          "channel_id": "YOUR_CHANNEL_ID"
+        }
+      },
+      "telegram-news": {
+        "type": "telegram",
+        "config": {
+          "bot_token": "YOUR_TELEGRAM_BOT_TOKEN",
+          "chat_id": "YOUR_CHAT_ID"
+        }
+      },
+      "console": {
+        "type": "console",
+        "config": {
+          "output_file": null
+        }
+      }
+    }
+  },
+  "interval": 60
+}
+```
+
+### Named Output Channels
         "https://rss.cnn.com/rss/edition.rss"
       ]
     },
