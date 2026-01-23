@@ -504,6 +504,8 @@ class NewsReaderConfig:
             List of configured output channel instances
         """
         output_settings = self.settings.get('output', {})
+        print(f"   🔍 get_output_channels called with channel_names={channel_names}")
+        print(f"   🔍 output_settings structure: {list(output_settings.keys()) if isinstance(output_settings, dict) else type(output_settings)}")
 
         # Support both old array format and new named channels format
         if isinstance(output_settings, list):
@@ -535,24 +537,30 @@ class NewsReaderConfig:
     def _get_output_channels_named(self, output_settings: Dict, channel_names: Optional[List[str]] = None) -> List[Any]:
         """Get output channels from named channels format."""
         channels = []
-        groups = output_settings.get('groups', {})
+        named_channels = output_settings.get('channels', {})
+        print(f"   🔍 Found {len(named_channels)} named channels: {list(named_channels.keys())}")
 
-        # If no specific channel names requested, get all channels from all groups
+        # If no specific channel names requested, get all channels
         if channel_names is None:
-            for group_name, group in groups.items():
-                for sub_type, config in group.items():
-                    channel_type = sub_type
-                    channel_config = config
-                    self._create_channel(channels, sub_type, channel_config)
+            print("   🔍 Getting ALL channels")
+            for channel_name, channel_def in named_channels.items():
+                channel_type = channel_def.get('type')
+                channel_config = channel_def.get('config', {})
+                print(f"   🔍 Creating channel '{channel_name}' of type '{channel_type}'")
+                self._create_channel(channels, channel_type, channel_config)
             return channels
 
+        # Get specific channels by name
+        print(f"   🔍 Getting specific channels: {channel_names}")
         for channel_name in channel_names:
-            if channel_name in groups:
-                group = groups[channel_name]
-                for sub_type, config in group.items():
-                    self._create_channel(channels, sub_type, config)
+            if channel_name in named_channels:
+                channel_def = named_channels[channel_name]
+                channel_type = channel_def.get('type')
+                channel_config = channel_def.get('config', {})
+                print(f"   🔍 Creating channel '{channel_name}' of type '{channel_type}'")
+                self._create_channel(channels, channel_type, channel_config)
             else:
-                print(f"Warning: Output group '{channel_name}' not found in configuration")
+                print(f"Warning: Output channel '{channel_name}' not found in configuration")
 
         return channels
 
@@ -3299,7 +3307,9 @@ if __name__ == "__main__":
 
         # Get appropriate output channels for this URL
         channel_names = url_channel_map.get(url)
+        print(f"   📤 Channel names for {url}: {channel_names}")
         specific_channels = config.get_output_channels(channel_names)
+        print(f"   📤 Selected {len(specific_channels)} output channels: {[type(ch).__name__ for ch in specific_channels]}")
 
         source_type = detect_source_type(url)
 
