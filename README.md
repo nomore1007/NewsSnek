@@ -17,13 +17,14 @@ A sophisticated Python-based RSS feed reader and web scraper that summarizes art
 
 ## Recent Changes
 
-### v2.x - Enhanced Channel Routing & JSON Sources
+### v3.x - Named Channel Architecture & Plugin System
 
-- **JSON Sources Format**: New structured JSON format for organizing news sources with groups, channel routing, and custom prompts
-- **Discord Bot Token Support**: Added support for Discord bot tokens alongside existing webhook authentication
-- **Source Group Routing**: Route specific source groups to specific output channels
-- **Migration Tools**: Automated migration from legacy `sources.txt` to `sources.json` format
-- **Inline Sources**: Support for defining sources directly within `settings.json`
+- **Named Output Channels**: Flexible channel configuration with named channels (`discord-main`, `telegram-bot`, etc.)
+- **Plugin-Based Architecture**: Modular design with separate summarizer and output channel implementations
+- **Enhanced Source Routing**: Route sources to multiple named output channels with custom prompts
+- **Hot-Reload Configuration**: Settings and sources reload automatically on each interval cycle
+- **Dual Source Formats**: Support both JSON and text formats with automatic detection
+- **Comprehensive Debug Logging**: Detailed logging for troubleshooting channel routing and configuration issues
 
 ## Quick Start
 
@@ -58,46 +59,127 @@ A sophisticated Python-based RSS feed reader and web scraper that summarizes art
 
 ### Settings Structure
 
+The main configuration uses named channels for flexible routing:
+
 ```json
 {
-  "summarizer": {
-    "provider": "ollama",
-    "config": {
-      "host": "localhost",
-      "model": "smollm2:135m",
-      "timeout": 120,
-      "preferred_language": "en"
-    }
+  "ollama": {
+    "host": "http://localhost:11434",
+    "model": "smollm2:135m",
+    "timeout": 120
   },
-  "output": [
-    {
-      "type": "telegram",
-      "config": {
-        "bot_token": "your-bot-token",
-        "chat_id": "your-chat-id"
+  "files": {
+    "sources": "sources.json",
+    "database": "news_reader.db"
+  },
+  "output": {
+    "channels": {
+      "discord-main": {
+        "type": "discord",
+        "config": {
+          "bot_token": "YOUR_DISCORD_BOT_TOKEN",
+          "channel_id": "YOUR_CHANNEL_ID"
+        }
+      },
+      "telegram-news": {
+        "type": "telegram",
+        "config": {
+          "bot_token": "YOUR_TELEGRAM_BOT_TOKEN",
+          "chat_id": "YOUR_CHAT_ID"
+        }
+      },
+      "console": {
+        "type": "console",
+        "config": {
+          "output_file": null
+        }
       }
     }
-  ]
+  },
+  "interval": 60
 }
 ```
 
-### Output Groups
+### JSON Sources Format
 
-Configure output channel groups in `settings.json` under `"output" > "groups"`. Each group contains channel configurations directly:
+For advanced source management, use `sources.json` with structured groups:
+
+```json
+{
+  "groups": {
+    "general-news": {
+      "description": "General news sources for all configured channels",
+      "channels": [],
+      "prompt": null,
+      "sources": [
+        "https://feeds.bbci.co.uk/news/rss.xml",
+        "https://rss.cnn.com/rss/edition.rss"
+      ]
+    },
+    "tech-news": {
+      "description": "Technology news for Discord with custom prompt",
+      "channels": ["discord-main"],
+      "prompt": "Summarize this technology article, focusing on innovations, technical details, and industry impact",
+      "sources": [
+        "https://feeds.feedburner.com/TechCrunch/",
+        "https://www.reddit.com/r/technology/.rss"
+      ]
+    },
+    "finance": {
+      "description": "Financial news for multiple channels",
+      "channels": ["discord-main", "telegram-news"],
+      "prompt": "Analyze this financial article for market implications and investment insights",
+      "sources": [
+        "https://feeds.bloomberg.com/markets/news.rss"
+      ]
+    }
+  }
+}
+```
+
+**JSON Sources Fields:**
+- `description`: Human-readable description of the group
+- `channels`: Array of named output channels (empty array = all channels)
+- `prompt`: Custom summarization prompt (null = use default)
+- `sources`: Array of RSS URLs or website URLs
+
+**Text Format Alternative:**
+For simpler setups, use `sources.txt` with group headers:
+```txt
+[tech-news:discord-main]
+# Technology news sources
+https://feeds.feedburner.com/TechCrunch/
+https://www.reddit.com/r/technology/.rss
+
+[general-news]
+# All channels
+https://feeds.bbci.co.uk/news/rss.xml
+```
+```
+
+### Named Output Channels
+
+Configure named output channels in `settings.json` under `"output" > "channels"`. Each channel has a unique name and configuration:
 
 ```json
 {
   "output": {
-    "groups": {
-      "tech": {
-        "telegram": {
-          "bot_token": "your-telegram-bot-token",
-          "chat_id": "your-chat-id"
-        },
-        "discord": {
+    "channels": {
+      "discord-tech": {
+        "type": "discord_webhook",
+        "config": {
           "webhook_url": "https://discord.com/api/webhooks/...",
-          "username": "Tech News"
+          "username": "Tech News",
+          "avatar_url": "https://example.com/tech-icon.png"
         }
+      },
+      "discord-general": {
+        "type": "discord",
+        "config": {
+          "bot_token": "YOUR_DISCORD_BOT_TOKEN",
+          "channel_id": "YOUR_CHANNEL_ID"
+        }
+      }
       },
       "news": {
         "telegram": {

@@ -1,0 +1,50 @@
+{
+  "groups": {
+    "general-news": {
+      "description": "General news sources for all configured channels",
+      "channels": [],
+      "prompt": null,
+      "sources": [
+        "https://feeds.bbci.co.uk/news/rss.xml",
+        "https://rss.cnn.com/rss/edition.rss",
+        "https://feeds.npr.org/1001/rss.xml"
+      ]
+    },
+    "tech-news": {
+      "description": "Technology news for Discord with custom prompt",
+      "channels": ["discord"],
+      "prompt": "Summarize this technology article, focusing on innovations, technical details, and industry impact",
+      "sources": [
+        "https://feeds.feedburner.com/TechCrunch/",
+        "https://www.reddit.com/r/technology/.rss"
+      ]
+    },
+    "finance": {
+      "description": "Financial news for multiple channels",
+      "channels": ["discord", "telegram"],
+      "prompt": "Analyze this financial article for market implications and investment insights",
+      "sources": [
+        "https://feeds.bloomberg.com/markets/news.rss",
+        "https://feeds.finance.yahoo.com/rss/2.0/headline"
+      ]
+    },
+    "sports": {
+      "description": "Sports news with custom prompt",
+      "channels": ["console"],
+      "prompt": "Focus on game results, player updates, and league standings",
+      "sources": [
+        "https://www.espn.com/espn/rss/news",
+        "https://feeds.bbci.co.uk/sport/rss.xml"
+      ]
+    },
+    "youtube-content": {
+      "description": "YouTube video transcripts for all channels",
+      "channels": [],
+      "prompt": null,
+      "sources": [
+        "https://www.youtube.com/feeds/videos.xml?channel_id=UCupvZG-5ko_eiXAupbDfxWw",
+        "https://www.youtube.com/feeds/videos.xml?channel_id=UC16niRr50-MSBwiO3YDb3RA"
+      ]
+    }
+  }
+}
