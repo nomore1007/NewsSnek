@@ -145,6 +145,30 @@ For advanced source management, use `sources.json` with structured groups:
 }
 ```
 
+### Timezone Configuration
+
+Configure timezone settings for overview scheduling:
+
+```json
+{
+  "timezone": "America/New_York",
+  "overview_interval_hours": 24,
+  "overview_start_time": "04:00",
+  "interval": 60
+}
+```
+
+**Timezone Settings:**
+- `"timezone"`: IANA timezone name (e.g., "America/New_York", "Europe/London", "Asia/Tokyo")
+- `"overview_interval_hours"`: How often to generate overviews (default: 24 hours)
+- `"overview_start_time"`: Time of day to generate overviews (HH:MM format, default: "04:00")
+- `"interval"`: News processing interval in seconds (default: 60)
+
+**Supported Timezone Formats:**
+- Full IANA names: `"America/New_York"`, `"Europe/London"`
+- UTC (default): `"UTC"`
+- Requires `pytz` library for non-UTC timezones, falls back to UTC if not available
+
 ### Named Output Channels
         "https://rss.cnn.com/rss/edition.rss"
       ]
