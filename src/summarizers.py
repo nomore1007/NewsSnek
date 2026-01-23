@@ -125,9 +125,9 @@ class OllamaSummarizer:
     def detect_language(self, text: str) -> str:
         """Detect the language of the text."""
         try:
-            from langdetect import detect, LangDetectError
+            from langdetect import detect
             return detect(text)
-        except (ImportError, LangDetectError):
+        except ImportError:
             return 'unknown'
 
     def translate_text(self, text: str, target_language: str) -> str:
