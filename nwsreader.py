@@ -346,7 +346,20 @@ class NewsReaderConfig:
                         self.settings = json.load(f)
                     return
                 except json.JSONDecodeError as e:
-                    print(f"⚠️ Invalid JSON in {path}: {e}")
+                    print(f"❌ Invalid JSON in {path}: {e}")
+                    print(f"   Line {e.lineno}, Column {e.colno}: {e.msg}")
+                    # Try to show the problematic line
+                    try:
+                        with open(path, 'r') as f:
+                            lines = f.readlines()
+                        if e.lineno <= len(lines):
+                            print(f"   Problematic line: {lines[e.lineno-1].rstrip()}")
+                            if e.colno > 0:
+                                print(f"   {' ' * (e.colno-1)}^")
+                    except:
+                        pass
+                    print(f"   Please check the JSON syntax in {path}")
+                    continue
                     print(f"💡 Check for missing commas, quotes, or bracket mismatches")
                     continue
 
@@ -1357,8 +1370,28 @@ def _parse_source_groups_inline(groups_data: Dict) -> Dict[str, SourceGroup]:
 
 def _parse_source_groups_json(filepath: str) -> Dict[str, SourceGroup]:
     """Parse JSON format sources file."""
-    with open(filepath, "r", encoding="utf-8") as f:
-        data = json.load(f)
+    try:
+        with open(filepath, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except json.JSONDecodeError as e:
+        print(f"❌ Invalid JSON in sources file {filepath}: {e}")
+        print(f"   Line {e.lineno}, Column {e.colno}: {e.msg}")
+        # Try to show the problematic line
+        try:
+            with open(filepath, 'r') as f:
+                lines = f.readlines()
+            if e.lineno <= len(lines):
+                print(f"   Problematic line: {lines[e.lineno-1].rstrip()}")
+                if e.colno > 0:
+                    print(f"   {' ' * (e.colno-1)}^")
+        except:
+            pass
+        print(f"   Please check the JSON syntax in {filepath}")
+        print("   Falling back to empty sources configuration.")
+        return {}
+    except FileNotFoundError:
+        print(f"❌ Sources file not found: {filepath}")
+        return {}
 
     groups = {}
     for group_name, group_data in data.get("groups", {}).items():
