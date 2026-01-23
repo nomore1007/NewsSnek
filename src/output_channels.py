@@ -1,5 +1,5 @@
 import requests
-from typing import Protocol, Any
+from typing import Protocol, Any, Optional
 import json
 
 from .config import OutputChannelConfig, OutputChannelResult
@@ -194,7 +194,74 @@ class DiscordOutputChannel:
             return OutputChannelResult(success=False, error=f"Discord API error: {e}")
         except Exception as e:
             return OutputChannelResult(success=False, error=f"Discord send failed: {e}")
+    
+    def send_summary(self, title: str, summary: str, source: str = "", category: str = "", thumbnail: Optional[str] = None, url: str = "") -> OutputChannelResult:
+        """
+        Send summary to Discord via webhook or bot token.
 
+        Args:
+            title: Article title
+            summary: Article summary
+            source: Source name
+            category: Article category
+            thumbnail: Article thumbnail URL (optional)
+            url: Article URL
+
+        Returns:
+            OutputChannelResult with success status
+        """
+        if not self.is_available():
+            return OutputChannelResult(success=False, error="Discord not properly configured")
+
+        try:
+            # Add URL at the bottom of description if provided
+            description = summary
+            if url:
+                description += f"\n\n🔗 {url}"
+
+            embed = {
+                "title": title,
+                "description": description,
+                "color": 0x3498db,  # Blue color
+                "footer": {
+                    "text": f"Source: {source}" if source else "News Reader"
+                }
+            }
+
+            if thumbnail:
+                embed["image"] = {"url": thumbnail}
+
+            if category:
+                embed["fields"] = [{
+                    "name": "Category",
+                    "value": category,
+                    "inline": True
+                }]
+
+            if self.auth_method == 'webhook':
+                payload = {
+                    "username": self.username,
+                    "embeds": [embed]
+                }
+                if self.avatar_url:
+                    payload["avatar_url"] = self.avatar_url
+
+                response = requests.post(self.webhook_url, json=payload, timeout=30)
+                response.raise_for_status()
+                return OutputChannelResult(success=True, message="Sent via webhook")
+
+            elif self.auth_method == 'bot':
+                payload = {"embeds": [embed]}
+
+                response = requests.post(self.api_url, headers=self.headers, json=payload, timeout=30)
+                response.raise_for_status()
+                return OutputChannelResult(success=True, message="Sent via bot")
+
+        except requests.exceptions.RequestException as e:
+            return OutputChannelResult(success=False, error=f"Discord API error: {e}")
+        except Exception as e:
+            return OutputChannelResult(success=False, error=f"Discord send failed: {e}")
+    
     def send_overview(self, overview: str, date: str) -> OutputChannelResult:
         """
         Send overview to Discord.

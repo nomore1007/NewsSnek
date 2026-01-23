@@ -1,35 +1,28 @@
 {
   "groups": {
-    "telegram-news": {
-      "description": "Imported from sources.txt",
-      "channels": [],
-      "prompt": null,
-      "sources": [
-        "https://feeds.bbci.co.uk/news/rss.xml",
-        "https://rss.cnn.com/rss/edition.rss",
-        "https://feeds.npr.org/1001/rss.xml"
-      ]
-    },
-    "discord-tech": {
-      "description": "Imported from sources.txt",
-      "channels": [
-        "discord"
-      ],
-      "prompt": "Summarize this technology article, focusing on innovations, technical details, and industry impact",
-      "sources": [
-        "https://feeds.feedburner.com/TechCrunch/",
-        "https://www.reddit.com/r/technology/.rss"
-      ]
-    },
-    "all-channels": {
-      "description": "Imported from sources.txt",
-      "channels": [],
-      "prompt": null,
-      "sources": [
-        "https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml",
-        "https://www.youtube.com/feeds/videos.xml?channel_id=UCupvZG-5ko_eiXAupbDfxWw",
-        "https://www.youtube.com/feeds/videos.xml?channel_id=UC16niRr50-MSBwiO3YDb3RA"
-      ]
-    }
+     "test": {
+       "description": "Testing",
+       "channels": ["test"],
+       "prompt": null,
+       "sources": [
+       ]
+     },
+     "news": {
+       "description": "US News summary",
+       "channels": ["test"],
+       "prompt": "Briefley summarize the following article without bias, factchecking, or editorialzation: ",
+       "sources": [
+         "https://nypost.com/us-news/feed/",
+         "https://nypost.com/world-news/feed/"
+        ]
+     },
+     "yt-news": {
+       "description": "US News summary",
+       "channels": ["test"],
+       "prompt": "Summarize the following transcript without bias, factchecking, or editorialzation. Extract main points made. Ignore any advertising from sponsors. ",
+       "sources": [
+         "https://www.youtube.com/feeds/videos.xml?channel_id=UCe02lGcO-ahAURWuxAJnjdA"
+       ]
+     }
   }
 }

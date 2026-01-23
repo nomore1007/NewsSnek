@@ -43,7 +43,7 @@ except ImportError:
     YOUTUBE_TRANSCRIPTS_AVAILABLE = False
 
 try:
-    from langdetect import detect, LangDetectError
+    from langdetect import detect
     LANGUAGE_DETECTION_AVAILABLE = True
 except ImportError:
     LANGUAGE_DETECTION_AVAILABLE = False
@@ -152,7 +152,7 @@ class Summarizer(ABC):
 
             detected = detect(clean_text)
             return detected
-        except (LangDetectError, Exception):
+        except Exception:
             return 'unknown'
 
     def translate_text(self, text: str, target_language: str = 'en') -> str:
@@ -1094,7 +1094,6 @@ class DiscordOutputChannel(OutputChannel):
         Args:
             config: Must contain either 'webhook_url' or 'bot_token' + 'channel_id'
         """
-        super().__init__(config)
         self.webhook_url = config.options.get('webhook_url')
         self.bot_token = config.options.get('bot_token')
         self.channel_id = config.options.get('channel_id')
@@ -1152,7 +1151,7 @@ class DiscordOutputChannel(OutputChannel):
 
         return False
 
-    def send_summary(self, title: str, summary: str, source: str = "", category: str = "") -> OutputChannelResult:
+    def send_summary(self, title: str, summary: str, source: str = "", category: str = "", thumbnail: Optional[str] = None, url: str = "") -> OutputChannelResult:
         """
         Send summary to Discord via webhook or bot token.
 
@@ -1525,16 +1524,16 @@ def track_source_error(source_url: str, error_message: str, error_tracking: Dict
     current_time = datetime.now().isoformat()
 
     # Update error counts
-    source_data["total_errors"] += 1
-    source_data["last_error"] = current_time
+    error_tracking[source_domain]["total_errors"] += 1
+    error_tracking[source_domain]["last_error"] = current_time
 
     if source_data["first_error"] is None:
         source_data["first_error"] = current_time
 
     # Update category counts
-    if error_category not in source_data["categories"]:
-        source_data["categories"][error_category] = 0
-    source_data["categories"][error_category] += 1
+    if error_category not in error_tracking[source_domain]["categories"]:
+        error_tracking[source_domain]["categories"][error_category] = 0
+    error_tracking[source_domain]["categories"][error_category] += 1
 
     # Check for consecutive failures (simple heuristic)
     # If we get errors within a short time frame, increment consecutive counter
@@ -3367,7 +3366,8 @@ if __name__ == "__main__":
 
                 # Reload configuration on each cycle to pick up changes
                 print("🔄 Reloading configuration...")
-                config = NewsReaderConfig("/app/data/settings.json")
+                workdir = os.getcwd()
+                config = NewsReaderConfig("settings.json")
                 settings = config.settings
                 
                 # Reload output channels in case settings changed
@@ -3379,7 +3379,7 @@ if __name__ == "__main__":
                 
                 # Reload sources in case settings or sources file changed
                 default_sources_file = settings.get('files', {}).get('sources', 'sources.txt')
-                sources_file_path = f"/app/data/{default_sources_file}"
+                sources_file_path = default_sources_file
                 urls = read_urls_from_file(sources_file_path)
                 
                 summaries = load_summaries_from_db("news_reader.db")
