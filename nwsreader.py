@@ -3084,7 +3084,7 @@ def process_single_article(url: str, title: str, content: str, summarizer: Summa
     for channel in output_channels:
         print(f"📤 Attempting to send to channel: {type(channel).__name__}")
         try:
-            result = channel.send_summary(title, summary, domain, category, "")
+            result = channel.send_summary(title, summary, domain, category, url)
             if result.success:
                 print(f"✅ Sent to {type(channel).__name__}: {result.message}")
             else:
