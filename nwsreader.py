@@ -807,7 +807,7 @@ class OutputChannel(ABC):
         self.config = config
 
     @abstractmethod
-    def send_summary(self, title: str, summary: str, source: str = "", category: str = "") -> OutputChannelResult:
+    def send_summary(self, title: str, summary: str, source: str = "", category: str = "", article_url: str = "") -> OutputChannelResult:
         """
         Send a summary to this output channel.
 
@@ -864,7 +864,7 @@ class ConsoleOutputChannel(OutputChannel):
         """Console is always available."""
         return True
 
-    def send_summary(self, title: str, summary: str, source: str = "", category: str = "") -> OutputChannelResult:
+    def send_summary(self, title: str, summary: str, source: str = "", category: str = "", article_url: str = "") -> OutputChannelResult:
         """
         Print summary to console or file.
 
@@ -873,6 +873,7 @@ class ConsoleOutputChannel(OutputChannel):
             summary: Article summary
             source: Source name
             category: Article category
+            article_url: Individual article URL
 
         Returns:
             OutputChannelResult with success status
@@ -954,7 +955,7 @@ class TelegramOutputChannel(OutputChannel):
         """Check if Telegram bot is properly configured."""
         return bool(self.bot_token and self.chat_id)
 
-    def send_summary(self, title: str, summary: str, source: str = "", category: str = "") -> OutputChannelResult:
+    def send_summary(self, title: str, summary: str, source: str = "", category: str = "", article_url: str = "") -> OutputChannelResult:
         """
         Send summary to Telegram chat.
 
@@ -963,6 +964,7 @@ class TelegramOutputChannel(OutputChannel):
             summary: Article summary
             source: Source name
             category: Article category
+            article_url: Individual article URL
 
         Returns:
             OutputChannelResult with success status
@@ -1152,7 +1154,7 @@ class DiscordOutputChannel(OutputChannel):
 
         return False
 
-    def send_summary(self, title: str, summary: str, source: str = "", category: str = "") -> OutputChannelResult:
+    def send_summary(self, title: str, summary: str, source: str = "", category: str = "", article_url: str = "") -> OutputChannelResult:
         """
         Send summary to Discord via webhook or bot token.
 
@@ -1161,17 +1163,22 @@ class DiscordOutputChannel(OutputChannel):
             summary: Article summary
             source: Source name
             category: Article category
+            article_url: Individual article URL
 
         Returns:
             OutputChannelResult with success status
         """
+        print(f"🔍 Discord send_summary called for: {title[:50]}...")
         if not self.is_available():
+            print("❌ Discord channel not available")
             return OutputChannelResult(success=False, error="Discord not properly configured")
 
         try:
+            print(f"🔍 Discord auth method: {self.auth_method}")
             embed = {
                 "title": title,
                 "description": summary,
+                "url": article_url if article_url else None,  # Make title clickable to article
                 "color": 0x3498db,  # Blue color
                 "footer": {
                     "text": f"Source: {source}" if source else "News Reader"
@@ -1186,23 +1193,29 @@ class DiscordOutputChannel(OutputChannel):
                 }]
 
             if self.auth_method == 'webhook':
+                print(f"🔍 Using Discord webhook: {self.webhook_url}")
                 payload = {
                     "username": self.username,
                     "embeds": [embed]
                 }
                 if self.avatar_url:
                     payload["avatar_url"] = self.avatar_url
+                print(f"🔍 Sending webhook payload: {len(str(payload))} chars")
                 response = requests.post(self.webhook_url, json=payload, timeout=30)
-                print(f"✅ Discord webhook: Summary sent successfully")
+                print(f"🔍 Webhook response status: {response.status_code}")
 
             elif self.auth_method == 'bot':
+                print(f"🔍 Using Discord bot to channel: {self.channel_id}")
                 payload = {
                     "embeds": [embed]
                 }
+                print(f"🔍 Sending bot payload: {len(str(payload))} chars")
+                print(f"🔍 Bot headers: {list(self.headers.keys())}")
                 response = requests.post(self.api_url, json=payload, headers=self.headers, timeout=30)
-                print(f"✅ Discord bot: Summary sent to channel {self.channel_id}")
+                print(f"🔍 Bot response status: {response.status_code}")
 
             response.raise_for_status()
+            print(f"✅ Discord {self.auth_method}: Summary sent successfully")
             return OutputChannelResult(success=True, message="Summary sent to Discord")
 
         except Exception as e:
@@ -2025,6 +2038,8 @@ def save_summaries(file_path: str, data: dict):
         print(f"[Error saving summaries: {e}]")
 
 def summarize_rss_feed(rss_url: str, summarizer: Summarizer, summaries: Dict, content_extractor: ContentExtractor, prompt: str, timeout: int = 120, output_channels: Optional[List[Any]] = None):
+    print(f"🔍 summarize_rss_feed called for: {rss_url}")
+    print(f"🔍 output_channels provided: {len(output_channels) if output_channels else 0} channels")
     """
     Process an RSS feed, extract articles, and generate summaries.
 
@@ -2090,92 +2105,91 @@ def summarize_rss_feed(rss_url: str, summarizer: Summarizer, summaries: Dict, co
         track_error(rss_url, "unexpected_error", str(e))
         return
 
-        # Initialize feed entry in summaries if not exists
-        if feed_title not in summaries:
-            summaries[feed_title] = []
+    # Initialize feed entry in summaries if not exists
+    if feed_title not in summaries:
+        summaries[feed_title] = []
 
-        # Build set of already processed article links to avoid duplicates
-        known_links = {entry["link"] for entry in summaries[feed_title] if "link" in entry}
+    # Build set of already processed article links to avoid duplicates
+    known_links = {entry["link"] for entry in summaries[feed_title] if "link" in entry}
 
-        for entry in feed.entries:
-            link = entry.get("link")
-            title = entry.get("title", "Untitled")
+    print(f"🔍 Processing {len(feed.entries)} entries...")
+    for entry in feed.entries:
+        link = entry.get("link")
+        title = entry.get("title", "Untitled")
 
-            if not link:
-                print(f"Skipping entry with no link: {title}")
-                continue
+        print(f"🔍 Processing entry: {title[:30]}...")
+        if not link:
+            print(f"Skipping entry with no link: {title}")
+            continue
 
-            if link in known_links:
-                print(f"⏩ Skipping already summarized: {title}")
-                continue
+        if link in known_links:
+            print(f"⏩ Skipping already summarized: {title}")
+            continue
 
-            print(f"🔹 Summarizing: {title}")
+        print(f"🔹 Summarizing: {title}")
 
-            # Get initial content from RSS feed (summary or description field)
-            summary_input = str(entry.get("summary", entry.get("description", "")))
+        # Get initial content from RSS feed (summary or description field)
+        summary_input = str(entry.get("summary", entry.get("description", "")))
 
-            # Enhance content if RSS summary is too short (< 100 chars)
-            # This ensures we have sufficient content for meaningful summarization
-            if not summary_input or len(summary_input.strip()) < 100:
-                if link:
-                    print(f"📖 RSS content insufficient, fetching full article...")
-                    print(f"   Article URL: {link}")
-                    full_content = get_full_article_content(str(link), timeout)
-                    if not full_content.startswith("[Error") and not full_content.startswith("[Could not"):
-                        summary_input = full_content
-                        print(f"✅ Retrieved full article content ({len(summary_input)} chars)")
+        # Enhance content if RSS summary is too short (< 100 chars)
+        # This ensures we have sufficient content for meaningful summarization
+        if not summary_input or len(summary_input.strip()) < 100:
+            if link:
+                print(f"📖 RSS content insufficient, fetching full article...")
+                print(f"   Article URL: {link}")
+                full_content = get_full_article_content(str(link), timeout)
+                if not full_content.startswith("[Error") and not full_content.startswith("[Could not"):
+                    summary_input = full_content
+                    print(f"✅ Retrieved full article content ({len(summary_input)} chars)")
+                else:
+                    print(f"⚠️ Could not retrieve full content: {full_content[:100]}...")
+
+        if not summary_input:
+            print("No content to summarize.\n")
+            continue
+
+        # Summarize the content
+        summary_result = summarizer.summarize(summary_input, prompt)
+
+        # Check if summarization was successful
+        if not summary_result.success:
+            print(f"❌ Summarization failed: {summary_result.error}")
+            print("⏭️ Skipping article - not marking as complete\n")
+            continue
+
+        summary = summary_result.content
+
+        # Extract category from the summary
+        category = extract_category_from_summary(summary)
+        print(f"🏷️ Category: {category}")
+        print(f"Summary: {summary}\n")
+
+        # Send summary to configured output channels
+        print(f"📤 Checking output_channels: {output_channels is not None and len(output_channels) if output_channels else 'None/Empty'}")
+        if output_channels:
+            print(f"📤 About to send summary for article: {title[:50]}...")
+            for channel in output_channels:
+                print(f"📤 Attempting to send to channel: {type(channel).__name__}")
+                try:
+                    result = channel.send_summary(title, summary, rss_url, category, link)
+                    if result.success:
+                        print(f"✅ Sent to {type(channel).__name__}: {result.message}")
                     else:
-                        print(f"⚠️ Could not retrieve full content: {full_content[:100]}...")
+                        print(f"❌ Failed to send to {type(channel).__name__}: {result.error}")
+                except Exception as e:
+                    print(f"❌ Error sending to {type(channel).__name__}: {e}")
 
-            if not summary_input:
-                print("No content to summarize.\n")
-                continue
-
-            # Summarize the content
-            summary_result = summarizer.summarize(summary_input, prompt)
-
-            # Check if summarization was successful
-            if not summary_result.success:
-                print(f"❌ Summarization failed: {summary_result.error}")
-                print("⏭️ Skipping article - not marking as complete\n")
-                continue
-
-            summary = summary_result.content
-
-            # Extract category from the summary
-            category = extract_category_from_summary(summary)
-            print(f"🏷️ Category: {category}")
-            print(f"Summary: {summary}\n")
-
-            # Send summary to configured output channels
-            if output_channels:
-                for channel in output_channels:
-                    try:
-                        result = channel.send_summary(title, summary, rss_url, category)
-                        if result.success:
-                            print(f"✅ Sent to {type(channel).__name__}: {result.message}")
-                        else:
-                            print(f"❌ Failed to send to {type(channel).__name__}: {result.error}")
-                    except Exception as e:
-                        print(f"❌ Error sending to {type(channel).__name__}: {e}")
-
-            summaries[feed_title].append({
-                "title": title,
-                "link": link,
-                "summary": summary,
-                "category": category
-            })
+        summaries[feed_title].append({
+            "title": title,
+            "link": link,
+            "summary": summary,
+            "category": category
+        })
 
         save_summaries_to_db(summaries, "news_reader.db")  # Save progress incrementally
 
         # Track successful processing
         track_source_success(rss_url, error_tracking)
-        save_error_tracking_to_db(error_tracking)
-
-    except Exception as e:
-        error_msg = str(e)
-        print(f"⚠️ Error processing RSS feed {rss_url}: {error_msg}")
-        track_source_error(rss_url, error_msg, error_tracking)
         save_error_tracking_to_db(error_tracking)
 
 def read_urls_from_file(filepath: str) -> List[str]:
@@ -3068,8 +3082,9 @@ def process_single_article(url: str, title: str, content: str, summarizer: Summa
 
     # Send summary to configured output channels
     for channel in output_channels:
+        print(f"📤 Attempting to send to channel: {type(channel).__name__}")
         try:
-            result = channel.send_summary(title, summary, domain, category)
+            result = channel.send_summary(title, summary, domain, category, "")
             if result.success:
                 print(f"✅ Sent to {type(channel).__name__}: {result.message}")
             else:
@@ -3088,10 +3103,13 @@ def process_single_article(url: str, title: str, content: str, summarizer: Summa
     save_summaries_to_db(summaries, "news_reader.db")
 
 if __name__ == "__main__":
+    print("🚀 NewsSnek starting...")
     # Parse arguments first to get workdir
+    print("📋 Parsing arguments...")
     parser = argparse.ArgumentParser(description="Summarize RSS feeds or scrape websites using a remote Ollama model.")
     parser.add_argument("--workdir", default=os.getcwd(), help="Working directory for config files")
     args, remaining = parser.parse_known_args()
+    print(f"✅ Arguments parsed: workdir={args.workdir}")
 
     # Change to working directory
     workdir = args.workdir

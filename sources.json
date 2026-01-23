@@ -1,12 +1,29 @@
 {
   "groups": {
-    "test": {
-      "description": "NYTimes test feed for Discord bot testing",
-      "channels": ["discord"],
-      "prompt": null,
-      "sources": [
-        "https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml"
-      ]
-    }
+     "test": {
+       "description": "Testing",
+       "channels": ["test"],
+       "prompt": null,
+       "sources": [
+	 "https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml"
+       ]
+     },
+     "news": {
+       "description": "US News summary",
+       "channels": ["test"],
+       "prompt": "Briefley summarize the following article without bias, factchecking, or editorialzation: ",
+       "sources": [
+         "https://nypost.com/us-news/feed/",
+         "https://nypost.com/world-news/feed/"
+        ]
+     },
+     "yt-news": {
+       "description": "US News summary",
+       "channels": ["test"],
+       "prompt": "Briefley summarize the following transcript without bias, factchecking, or editorialzation: ",
+       "sources": [
+         "https://www.youtube.com/feeds/videos.xml?channel_id=UCe02lGcO-ahAURWuxAJnjdA"
+       ]
+     }
   }
 }
