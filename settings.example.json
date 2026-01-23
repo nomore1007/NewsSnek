@@ -43,5 +43,8 @@
       }
     }
   },
+  "timezone": "UTC",
+  "overview_interval_hours": 24,
+  "overview_start_time": "04:00",
   "interval": 60
 }
