@@ -329,6 +329,7 @@ class NewsReaderConfig:
         self.settings_file = settings_file
         self._load_settings()
         self._ensure_sources_file()
+        self._output_channel_instances: Dict[str, OutputChannel] = {}
 
     def _load_settings(self):
         """Load settings from JSON file with defaults."""
@@ -516,6 +517,7 @@ class NewsReaderConfig:
         Returns:
             List of configured output channel instances
         """
+        channels_to_return = []
         output_settings = self.settings.get('output', {})
         print(f"   🔍 get_output_channels called with channel_names={channel_names}")
         print(f"   🔍 output_settings structure: {list(output_settings.keys()) if isinstance(output_settings, dict) else type(output_settings)}")
@@ -526,7 +528,44 @@ class NewsReaderConfig:
             return self._get_output_channels_legacy(output_settings, channel_names)
         else:
             # New format: named channels object
-            return self._get_output_channels_named(output_settings, channel_names)
+            named_channels_defs = output_settings.get('channels', {})
+            print(f"   🔍 Found {len(named_channels_defs)} named channels: {list(named_channels_defs.keys())}")
+
+            channels_to_process = []
+            if channel_names is None:
+                print("   🔍 Getting ALL channels")
+                channels_to_process = list(named_channels_defs.keys())
+            else:
+                print(f"   🔍 Getting specific channels: {channel_names}")
+                channels_to_process = channel_names
+
+            for channel_name in channels_to_process:
+                if channel_name not in named_channels_defs:
+                    print(f"Warning: Output channel '{channel_name}' not found in configuration")
+                    continue
+
+                if channel_name not in self._output_channel_instances:
+                    channel_def = named_channels_defs[channel_name]
+                    channel_type = channel_def.get('type')
+                    channel_config = channel_def.get('config', {})
+                    print(f"   🔍 Creating channel '{channel_name}' of type '{channel_type}'")
+                    
+                    if channel_type:
+                        config = OutputChannelConfig(channel_type, **channel_config)
+                        try:
+                            channel_instance = OutputChannelFactory.create_channel(config)
+                            if channel_instance.is_available():
+                                self._output_channel_instances[channel_name] = channel_instance
+                                channels_to_return.append(channel_instance)
+                            else:
+                                print(f"Warning: Output channel '{channel_name}' (type: {channel_type}) not available (not configured)")
+                        except ValueError as e:
+                            print(f"Warning: {e}")
+                else:
+                    print(f"   🔍 Reusing existing channel instance for '{channel_name}'")
+                    channels_to_return.append(self._output_channel_instances[channel_name])
+
+            return channels_to_return
 
     def _get_output_channels_legacy(self, output_settings: List[Dict], channel_names: Optional[List[str]] = None) -> List[Any]:
         """Get output channels from legacy array format."""
@@ -546,49 +585,6 @@ class NewsReaderConfig:
                     print(f"Warning: {e}")
 
         return channels
-
-    def _get_output_channels_named(self, output_settings: Dict, channel_names: Optional[List[str]] = None) -> List[Any]:
-        """Get output channels from named channels format."""
-        channels = []
-        named_channels = output_settings.get('channels', {})
-        print(f"   🔍 Found {len(named_channels)} named channels: {list(named_channels.keys())}")
-
-        # If no specific channel names requested, get all channels
-        if channel_names is None:
-            print("   🔍 Getting ALL channels")
-            for channel_name, channel_def in named_channels.items():
-                channel_type = channel_def.get('type')
-                channel_config = channel_def.get('config', {})
-                print(f"   🔍 Creating channel '{channel_name}' of type '{channel_type}'")
-                self._create_channel(channels, channel_type, channel_config)
-            return channels
-
-        # Get specific channels by name
-        print(f"   🔍 Getting specific channels: {channel_names}")
-        for channel_name in channel_names:
-            if channel_name in named_channels:
-                channel_def = named_channels[channel_name]
-                channel_type = channel_def.get('type')
-                channel_config = channel_def.get('config', {})
-                print(f"   🔍 Creating channel '{channel_name}' of type '{channel_type}'")
-                self._create_channel(channels, channel_type, channel_config)
-            else:
-                print(f"Warning: Output channel '{channel_name}' not found in configuration")
-
-        return channels
-
-    def _create_channel(self, channels, channel_type, channel_config):
-        """Helper to create and add a channel."""
-        if channel_type:
-            config = OutputChannelConfig(channel_type, **channel_config)
-            try:
-                channel = OutputChannelFactory.create_channel(config)
-                if channel.is_available():
-                    channels.append(channel)
-                else:
-                    print(f"Warning: Output channel '{channel_type}' not available (not configured)")
-            except ValueError as e:
-                print(f"Warning: {e}")
 
     def get_interval(self) -> int:
         """Get the run interval in minutes from settings or environment."""
@@ -619,16 +615,50 @@ class ContentExtractor:
         """
         self.config = config
 
-    def extract_from_url(self, url: str, timeout: Optional[int] = None) -> str:
+    def get_internet_archive_url(self, url: str) -> Optional[str]:
+        """Get the latest Internet Archive snapshot URL."""
+        try:
+            archive_url = f"https://archive.org/wayback/available?url={quote(url)}"
+            response = requests.get(archive_url, timeout=10)
+            response.raise_for_status()
+            data = response.json()
+            if data.get("archived_snapshots", {}).get("closest"):
+                return data["archived_snapshots"]["closest"]["url"]
+            return None
+        except Exception as e:
+            print(f"Failed to get Internet Archive URL: {e}")
+            return None
+
+    def _extract_thumbnail_url(self, soup: BeautifulSoup, base_url: str) -> Optional[str]:
+        """Extract thumbnail URL from HTML soup."""
+        # Try OpenGraph and Twitter card images first
+        og_image = soup.find('meta', property='og:image')
+        if og_image and og_image.get('content'):
+            return urljoin(base_url, og_image['content'])
+
+        twitter_image = soup.find('meta', property='twitter:image')
+        if twitter_image and twitter_image.get('content'):
+            return urljoin(base_url, twitter_image['content'])
+
+        # Find a prominent image in the article body
+        article_body = soup.find('article') or soup.find('main')
+        if article_body:
+            first_img = article_body.find('img')
+            if first_img and first_img.get('src'):
+                return urljoin(base_url, first_img['src'])
+
+        return None
+
+    def extract_from_url(self, url: str, timeout: Optional[int] = None) -> Tuple[str, Optional[str]]:
         """
-        Extract content from a URL (RSS or website).
+        Extract content and thumbnail from a URL.
 
         Args:
             url: URL to extract content from
-            timeout: Request timeout (uses config default if None)
+            timeout: Request timeout
 
         Returns:
-            Extracted content or error message
+            Tuple of (content, thumbnail_url)
         """
         if timeout is None:
             timeout = self.config.get('processing', {}).get('scrape_timeout', 30)
@@ -645,6 +675,8 @@ class ContentExtractor:
             response.raise_for_status()
 
             soup = BeautifulSoup(response.content.decode('utf-8', errors='ignore'), 'html.parser')
+            base_url = f"{urlparse(url).scheme}://{urlparse(url).netloc}"
+            thumbnail_url = self._extract_thumbnail_url(soup, base_url)
 
             # Check for YouTube content
             if self._is_youtube_video_url(url):
@@ -653,13 +685,29 @@ class ContentExtractor:
                                      transcript.startswith('[Could not') or
                                      transcript.startswith('[Invalid') or
                                      transcript.startswith('[YouTube')):
-                    return transcript
+                    return transcript, thumbnail_url
 
             # Extract main article content
-            return self._extract_main_content(soup)
+            content = self._extract_main_content(soup)
+            return content, thumbnail_url
 
         except Exception as e:
-            return f"[Error extracting content from {url}: {e}]"
+            print(f"Failed to extract content from {url}: {e}. Trying Internet Archive.")
+            archive_url = self.get_internet_archive_url(url)
+            if archive_url:
+                print(f"Found Internet Archive snapshot: {archive_url}")
+                try:
+                    response = requests.get(archive_url, headers=headers, timeout=timeout)
+                    response.raise_for_status()
+                    soup = BeautifulSoup(response.content.decode('utf-8', errors='ignore'), 'html.parser')
+                    base_url = f"{urlparse(url).scheme}://{urlparse(url).netloc}"
+                    thumbnail_url = self._extract_thumbnail_url(soup, base_url)
+                    content = self._extract_main_content(soup)
+                    return content, thumbnail_url
+                except Exception as archive_e:
+                    return f"[Error extracting content from Internet Archive {archive_url}: {archive_e}]", None
+            else:
+                return f"[Error extracting content from {url}: {e}]", None
 
     def _is_youtube_video_url(self, url: str) -> bool:
         """Check if URL is a YouTube video URL (not channel, playlist, etc.)."""
@@ -820,7 +868,7 @@ class OutputChannel(ABC):
         self.config = config
 
     @abstractmethod
-    def send_summary(self, title: str, summary: str, source: str = "", category: str = "", article_url: str = "") -> OutputChannelResult:
+    def send_summary(self, title: str, summary: str, source: str = "", category: str = "", article_url: str = "", thumbnail_url: Optional[str] = None) -> OutputChannelResult:
         """
         Send a summary to this output channel.
 
@@ -829,7 +877,8 @@ class OutputChannel(ABC):
             summary: Article summary
             source: Source name
             category: Article category
-
+            article_url: Original article URL
+            thumbnail_url: URL of a thumbnail image
         Returns:
             OutputChannelResult with success status and message
         """
@@ -877,7 +926,7 @@ class ConsoleOutputChannel(OutputChannel):
         """Console is always available."""
         return True
 
-    def send_summary(self, title: str, summary: str, source: str = "", category: str = "", article_url: str = "") -> OutputChannelResult:
+    def send_summary(self, title: str, summary: str, source: str = "", category: str = "", article_url: str = "", thumbnail_url: Optional[str] = None) -> OutputChannelResult:
         """
         Print summary to console or file.
 
@@ -887,6 +936,7 @@ class ConsoleOutputChannel(OutputChannel):
             source: Source name
             category: Article category
             article_url: Individual article URL
+            thumbnail_url: URL of a thumbnail image
 
         Returns:
             OutputChannelResult with success status
@@ -897,6 +947,10 @@ class ConsoleOutputChannel(OutputChannel):
                 output += f"Source: {source}\n"
             if category:
                 output += f"Category: {category}\n"
+            if article_url:
+                output += f"URL: {article_url}\n"
+            if thumbnail_url:
+                output += f"Thumbnail: {thumbnail_url}\n"
             output += f"Summary: {summary}\n\n"
 
             if self.output_file:
@@ -968,7 +1022,7 @@ class TelegramOutputChannel(OutputChannel):
         """Check if Telegram bot is properly configured."""
         return bool(self.bot_token and self.chat_id)
 
-    def send_summary(self, title: str, summary: str, source: str = "", category: str = "", article_url: str = "") -> OutputChannelResult:
+    def send_summary(self, title: str, summary: str, source: str = "", category: str = "", article_url: str = "", thumbnail_url: Optional[str] = None) -> OutputChannelResult:
         """
         Send summary to Telegram chat.
 
@@ -978,6 +1032,7 @@ class TelegramOutputChannel(OutputChannel):
             source: Source name
             category: Article category
             article_url: Individual article URL
+            thumbnail_url: URL of a thumbnail image
 
         Returns:
             OutputChannelResult with success status
@@ -991,15 +1046,26 @@ class TelegramOutputChannel(OutputChannel):
                 message += f"Source: _{source}_\n"
             if category:
                 message += f"Category: _{category}_\n"
+            if article_url:
+                message += f"[Original Article]({article_url})\n"
             message += f"\n{summary}"
 
-            payload = {
-                'chat_id': self.chat_id,
-                'text': message,
-                'parse_mode': 'Markdown'
-            }
-
-            response = requests.post(f"{self.api_url}/sendMessage", json=payload, timeout=30)
+            if thumbnail_url:
+                payload = {
+                    'chat_id': self.chat_id,
+                    'photo': thumbnail_url,
+                    'caption': message,
+                    'parse_mode': 'Markdown'
+                }
+                response = requests.post(f"{self.api_url}/sendPhoto", json=payload, timeout=30)
+            else:
+                payload = {
+                    'chat_id': self.chat_id,
+                    'text': message,
+                    'parse_mode': 'Markdown'
+                }
+                response = requests.post(f"{self.api_url}/sendMessage", json=payload, timeout=30)
+            
             response.raise_for_status()
 
             result = response.json()
@@ -1166,7 +1232,7 @@ class DiscordOutputChannel(OutputChannel):
 
         return False
 
-    def send_summary(self, title: str, summary: str, source: str = "", category: str = "", thumbnail: Optional[str] = None, url: str = "") -> OutputChannelResult:
+    def send_summary(self, title: str, summary: str, source: str = "", category: str = "", article_url: str = "", thumbnail_url: Optional[str] = None) -> OutputChannelResult:
         """
         Send summary to Discord via webhook or bot token.
 
@@ -1176,6 +1242,7 @@ class DiscordOutputChannel(OutputChannel):
             source: Source name
             category: Article category
             article_url: Individual article URL
+            thumbnail_url: URL of a thumbnail image
 
         Returns:
             OutputChannelResult with success status
@@ -1190,13 +1257,16 @@ class DiscordOutputChannel(OutputChannel):
             embed = {
                 "title": title,
                 "description": summary,
-                "url": url if url else None,  # Make title clickable to article
+                "url": article_url if article_url else None,
                 "color": 0x3498db,  # Blue color
                 "footer": {
                     "text": f"Source: {source}" if source else "News Reader"
                 }
             }
 
+            if thumbnail_url:
+                embed["thumbnail"] = {"url": thumbnail_url}
+            
             if category:
                 embed["fields"] = [{
                     "name": "Category",
@@ -2162,6 +2232,7 @@ def summarize_rss_feed(rss_url: str, summarizer: Summarizer, summaries: Dict, co
 
         # Get initial content from RSS feed (summary or description field)
         summary_input = str(entry.get("summary", entry.get("description", "")))
+        thumbnail_url = None
 
         # Enhance content if RSS summary is too short (< 100 chars)
         # This ensures we have sufficient content for meaningful summarization
@@ -2169,7 +2240,7 @@ def summarize_rss_feed(rss_url: str, summarizer: Summarizer, summaries: Dict, co
             if link:
                 print(f"📖 RSS content insufficient, fetching full article...")
                 print(f"   Article URL: {link}")
-                full_content = get_full_article_content(str(link), timeout)
+                full_content, thumbnail_url = get_full_article_content(str(link), timeout)
                 if not full_content.startswith("[Error") and not full_content.startswith("[Could not"):
                     summary_input = full_content
                     print(f"✅ Retrieved full article content ({len(summary_input)} chars)")
@@ -2203,7 +2274,7 @@ def summarize_rss_feed(rss_url: str, summarizer: Summarizer, summaries: Dict, co
             for channel in output_channels:
                 print(f"📤 Attempting to send to channel: {type(channel).__name__}")
                 try:
-                    result = channel.send_summary(title, summary, rss_url, category, link)
+                    result = channel.send_summary(title, summary, source=rss_url, category=category, article_url=link, thumbnail_url=thumbnail_url)
                     if result.success:
                         print(f"✅ Sent to {type(channel).__name__}: {result.message}")
                     else:
@@ -2215,7 +2286,8 @@ def summarize_rss_feed(rss_url: str, summarizer: Summarizer, summaries: Dict, co
             "title": title,
             "link": link,
             "summary": summary,
-            "category": category
+            "category": category,
+            "thumbnail": thumbnail_url
         })
 
         save_summaries_to_db(summaries, "news_reader.db")  # Save progress incrementally
@@ -2845,7 +2917,7 @@ def extract_youtube_transcript(video_url: str) -> str:
         return f"[Error extracting YouTube transcript: {e}]"
 
 # Legacy function for backward compatibility
-def get_full_article_content(url: str, timeout: int = 30) -> str:
+def get_full_article_content(url: str, timeout: int = 30) -> tuple[str, Optional[str]]:
     """
     Get full article content (backward compatibility function).
 
@@ -3158,11 +3230,14 @@ if __name__ == "__main__":
     summarizer = SummarizerFactory.create_summarizer(summarizer_config)
     content_extractor = ContentExtractor(config)
     data_manager = DataManager(config)
-    output_channels = config.get_output_channels()
+    
+    # Output channels are now fetched per URL based on group configuration, so initialize all here
+    # and then filter as needed later.
+    all_output_channels = config.get_output_channels()
 
     # Debug: Show loaded settings
     print(f"⚙️  Loaded settings from: {config.settings_file}")
-    print(f"📋 Available output channels: {[type(ch).__name__ for ch in output_channels]}")
+    print(f"📋 All available output channels: {[type(ch).__name__ for ch in all_output_channels]}")
 
     files_section = settings.get('files', {})
     sources_file = files_section.get('sources', 'sources.txt')
@@ -3253,15 +3328,19 @@ if __name__ == "__main__":
     init_database("news_reader.db")
     error_tracking = load_error_tracking_from_db()
 
-    urls = []
-    source_groups = {}
-
+    # Refactor: Use parse_source_groups to get all source info directly
+    source_groups: Dict[str, SourceGroup] = {}
     if args.file:
-        urls.extend(read_urls_from_file(args.file))
-        # Parse groups for channel routing
         source_groups = parse_source_groups(args.file, settings)
+    
+    # Handle single URL arg, add to a default group if not already present
     if args.url:
-        urls.append(args.url)
+        single_url_group_name = "single_url_group"
+        if single_url_group_name not in source_groups:
+            source_groups[single_url_group_name] = SourceGroup(single_url_group_name, [], [], None)
+        source_groups[single_url_group_name].urls.append(args.url)
+
+    all_urls_to_process = [url for group in source_groups.values() for url in group.urls]
 
     summaries = load_summaries_from_db("news_reader.db")
 
@@ -3285,9 +3364,9 @@ if __name__ == "__main__":
         # Send overview to configured output channels
         current_date = datetime.now().strftime("%Y-%m-%d")
         successful_sends = 0
-        total_channels = len(output_channels)
+        total_channels = len(all_output_channels) # Use all_output_channels here
 
-        for channel in output_channels:
+        for channel in all_output_channels:
             try:
                 result = channel.send_overview(overview, current_date)
                 if result.success:
@@ -3309,7 +3388,7 @@ if __name__ == "__main__":
         sys.exit(0)
 
     # Process URLs if provided
-    if not urls:
+    if not all_urls_to_process:
         print("Error: You must provide either --url or --file.")
         sys.exit(1)
 
@@ -3319,70 +3398,29 @@ if __name__ == "__main__":
     website_count = 0
     skipped_sources = 0
 
-    # Create mappings for URL to channels and prompts
-    url_channel_map = {}
-    url_prompt_map = {}
+    for group_name, group in source_groups.items():
+        group_output_channels = config.get_output_channels(group.output_channels if group.output_channels else None)
+        group_article_prompt = group.prompt if group.prompt else settings.get("prompts", {}).get("article_summary", "Summarize this article briefly:")
 
-    # If using grouped format, build channel and prompt mappings
-    if source_groups:
-        for group in source_groups.values():
-            for url in group.urls:
-                if group.output_channels:
-                    # Group specifies specific channels
-                    url_channel_map[url] = group.output_channels
-                else:
-                    # Empty channel list means use all channels
-                    url_channel_map[url] = None
+        for url in group.urls:
+            # Check if source should be excluded due to excessive failures
+            if should_exclude_source(url, error_tracking):
+                print(f"🚫 Skipping unreliable source: {url}")
+                skipped_sources += 1
+                continue
 
-                # Store group-specific prompt if available
-                if group.prompt:
-                    url_prompt_map[url] = group.prompt
-    else:
-        # Flat format - all URLs go to all channels, use default prompt
-        for url in urls:
-            url_channel_map[url] = None
-            url_prompt_map[url] = None
+            source_type = detect_source_type(url)
 
-    for url in urls:
-        # Ensure URL is a string to prevent type errors
-        if not isinstance(url, str):
-            print(f"Warning: Skipping invalid URL type {type(url)}: {url}")
-            continue
-
-        # Check if source should be excluded due to excessive failures
-        if should_exclude_source(url, error_tracking):
-            print(f"🚫 Skipping unreliable source: {url}")
-            skipped_sources += 1
-            continue
-
-        # Get appropriate output channels for this URL
-        channel_names = url_channel_map.get(url)
-        print(f"   📤 Channel names for {url}: {channel_names}")
-        specific_channels = config.get_output_channels(channel_names)
-        print(f"   📤 Selected {len(specific_channels)} output channels: {[type(ch).__name__ for ch in specific_channels]}")
-
-        source_type = detect_source_type(url)
-
-        # Get prompt for this URL (group-specific or default)
-        custom_prompt = url_prompt_map.get(url)
-        if custom_prompt:
-            article_prompt = custom_prompt
-            print(f"   📝 Using custom prompt: {custom_prompt[:50]}...")
-        else:
-            article_prompt = settings.get("prompts", {}).get("article_summary", "Summarize this article briefly:")
-
-        if args.scrape or source_type == "website":
-            print(f"🌐 Scraping website: {url}")
-            if channel_names:
-                print(f"   📤 Channels: {', '.join(channel_names)}")
-            process_website(url, summarizer, content_extractor, summaries, specific_channels, article_prompt, args.timeout)
-            website_count += 1
-        else:  # RSS feed
-            print(f"📡 Processing RSS feed: {url}")
-            if channel_names:
-                print(f"   📤 Channels: {', '.join(channel_names)}")
-            summarize_rss_feed(url, summarizer, summaries, content_extractor, article_prompt, args.timeout, specific_channels)
-            rss_count += 1
+            if args.scrape or source_type == "website":
+                print(f"🌐 Scraping website: {url}")
+                print(f"   📤 Channels for this URL: {[type(ch).__name__ for ch in group_output_channels]}")
+                process_website(url, summarizer, content_extractor, summaries, group_output_channels, group_article_prompt, args.timeout)
+                website_count += 1
+            else:  # RSS feed
+                print(f"📡 Processing RSS feed: {url}")
+                print(f"   📤 Channels for this URL: {[type(ch).__name__ for ch in group_output_channels]}")
+                summarize_rss_feed(url, summarizer, summaries, content_extractor, group_article_prompt, args.timeout, group_output_channels)
+                rss_count += 1
 
     # Report final statistics
     print(f"\n✅ Processing complete: {rss_count} RSS feeds, {website_count} websites processed")
@@ -3421,17 +3459,16 @@ if __name__ == "__main__":
                 config = NewsReaderConfig("settings.json")
                 settings = config.settings
                 
-                # Reload output channels in case settings changed
-                output_channels = config.get_output_channels()
-                print(f"📋 Reloaded output channels: {[type(ch).__name__ for ch in output_channels]}")
+                # Reload all output channels for overview. Specific channels for groups are fetched dynamically.
+                all_output_channels = config.get_output_channels()
+                print(f"📋 Reloaded output channels: {[type(ch).__name__ for ch in all_output_channels]}")
 
                 # Recalculate next overview time in case settings changed
                 next_overview = get_next_overview_time()
                 
                 # Reload sources in case settings or sources file changed
-                default_sources_file = settings.get('files', {}).get('sources', 'sources.txt')
-                sources_file_path = default_sources_file
-                urls = read_urls_from_file(sources_file_path)
+                sources_file_path = settings.get('files', {}).get('sources', 'sources.txt')
+                source_groups = parse_source_groups(sources_file_path, settings)
                 
                 summaries = load_summaries_from_db("news_reader.db")
                 error_tracking = load_error_tracking_from_db("news_reader.db")
@@ -3440,27 +3477,33 @@ if __name__ == "__main__":
                 website_count = 0
                 skipped_sources = 0
 
-                for url in urls:
-                    if should_exclude_source(url, error_tracking):
-                        skipped_sources += 1
-                        continue
+                for group_name, group in source_groups.items():
+                    group_output_channels = config.get_output_channels(group.output_channels if group.output_channels else None)
+                    group_article_prompt = group.prompt if group.prompt else settings.get("prompts", {}).get("article_summary", "Summarize this article briefly:")
 
-                    source_type = detect_source_type(url)
+                    for url in group.urls:
+                        if should_exclude_source(url, error_tracking):
+                            print(f"🚫 Skipping unreliable source: {url}")
+                            skipped_sources += 1
+                            continue
 
-                    if args.scrape or source_type == "website":
-                        print(f"🌐 Processing website: {url}")
-                        article_prompt = settings.get("prompts", {}).get("article_summary", "Summarize this article briefly:")
-                        process_website(url, summarizer, content_extractor, summaries, output_channels, article_prompt, args.timeout)
-                        website_count += 1
-                    else:  # RSS feed
-                        print(f"📡 Processing RSS feed: {url}")
-                        article_prompt = settings.get("prompts", {}).get("article_summary", "Summarize this article briefly:")
-                        summarize_rss_feed(url, summarizer, summaries, content_extractor, article_prompt, args.timeout, output_channels)
-                        rss_count += 1
+                        source_type = detect_source_type(url)
+
+                        if args.scrape or source_type == "website":
+                            print(f"🌐 Scraping website: {url}")
+                            print(f"   📤 Channels for this URL: {[type(ch).__name__ for ch in group_output_channels]}")
+                            process_website(url, summarizer, content_extractor, summaries, group_output_channels, group_article_prompt, args.timeout)
+                            website_count += 1
+                        else:  # RSS feed
+                            print(f"📡 Processing RSS feed: {url}")
+                            print(f"   📤 Channels for this URL: {[type(ch).__name__ for ch in group_output_channels]}")
+                            summarize_rss_feed(url, summarizer, summaries, content_extractor, group_article_prompt, args.timeout, group_output_channels)
+                            rss_count += 1
 
                 # Generate overview if requested
                 if args.overview:
                     print("🌍 Generating state of the world overview...")
+                    overview_model = getattr(args, 'overview_model', settings.get("ollama", {}).get("overview_model", "llama2"))
                     overview_prompt_final = settings.get("prompts", {}).get("overview_summary", "Based on the following news summaries, provide a comprehensive overview...")
                     max_summaries_final = settings.get("processing", {}).get("max_overview_summaries", 50)
                     overview = generate_world_overview(summarizer, summaries, overview_prompt_final, max_summaries_final)
@@ -3472,7 +3515,7 @@ if __name__ == "__main__":
 
                         # Send overview to configured output channels
                         current_date = datetime.now().strftime("%Y-%m-%d")
-                        for channel in output_channels:
+                        for channel in all_output_channels:
                             try:
                                 result = channel.send_overview(overview, current_date)
                                 if result.success:
@@ -3498,5 +3541,5 @@ if __name__ == "__main__":
             print("\n\n🛑 Continuous mode stopped by user")
         except Exception as e:
             print(f"\n❌ Error in continuous mode: {e}")
-    
+
 
