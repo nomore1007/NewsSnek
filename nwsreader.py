@@ -1604,119 +1604,20 @@ def categorize_error(error_message: str) -> str:
     # Default category
     return "unknown"
 
-def load_error_tracking() -> Dict:
-    """Load error tracking data from file."""
-    try:
-        with open("error_tracking.json", "r") as f:
-            return json.load(f)
-    except FileNotFoundError:
-        return {}
-    except json.JSONDecodeError:
-        return {}
 
-def save_error_tracking(error_data: Dict):
-    """Save error tracking data to file."""
-    try:
-        with open("error_tracking.json", "w") as f:
-            json.dump(error_data, f, indent=2)
-    except Exception as e:
-        print(f"[Error saving error tracking: {e}]")
 
-def track_source_error(source_url: str, error_message: str, error_tracking: Dict):
-    """Track errors for a specific source."""
-    error_category = categorize_error(error_message)
-    source_domain = urlparse(source_url).netloc
 
-    if source_domain not in error_tracking:
-        error_tracking[source_domain] = {
-            "total_errors": 0,
-            "categories": {},
-            "last_error": None,
-            "first_error": None,
-            "consecutive_failures": 0
-        }
 
-    source_data = error_tracking[source_domain]
-    current_time = datetime.now().isoformat()
-
-    # Update error counts
-    error_tracking[source_domain]["total_errors"] += 1
-    error_tracking[source_domain]["last_error"] = current_time
-
-    if source_data["first_error"] is None:
-        source_data["first_error"] = current_time
-
-    # Update category counts
-    if error_category not in error_tracking[source_domain]["categories"]:
-        error_tracking[source_domain]["categories"][error_category] = 0
-    error_tracking[source_domain]["categories"][error_category] += 1
-
-    # Check for consecutive failures (simple heuristic)
-    # If we get errors within a short time frame, increment consecutive counter
-    # This tracks if errors are happening repeatedly without successful processing
-    if source_data.get("last_success"):
-        last_success = datetime.fromisoformat(source_data["last_success"])
-        time_since_success = datetime.now() - last_success
-        # If no success in more than 24 hours, count as consecutive failure
-        if time_since_success.days > 1:
-            source_data["consecutive_failures"] += 1
-    else:
-        # No recorded success, so this is a consecutive failure
-        source_data["consecutive_failures"] += 1
-
-    # Reset consecutive failures on success (will be called separately)
-    return error_tracking
-
-def track_source_success(source_url: str, error_tracking: Dict):
-    """Track successful processing for a source."""
-    source_domain = urlparse(source_url).netloc
-    if source_domain in error_tracking:
-        error_tracking[source_domain]["consecutive_failures"] = 0
-        error_tracking[source_domain]["last_success"] = datetime.now().isoformat()
-
-def should_exclude_source(source_url: str, error_tracking: Dict, max_consecutive_failures: int = 5) -> bool:
-    """Check if a source should be excluded due to excessive failures."""
-    source_domain = urlparse(source_url).netloc
-    if source_domain in error_tracking:
-        source_data = error_tracking[source_domain]
-        return source_data.get("consecutive_failures", 0) >= max_consecutive_failures
+def should_exclude_source(source_url: str) -> bool:
+    """
+    Placeholder for future error tracking. Currently, always returns False to process all sources.
+    This function has been simplified as per user request to disable unreliable source tracking.
+    """
     return False
 
-def report_source_health(error_tracking: Dict):
-    """Generate a report of source health status."""
-    if not error_tracking:
-        return "All sources healthy."
 
-    report = "Source Health Report:\n"
-    unhealthy_sources = []
 
-    for domain, data in error_tracking.items():
-        total_errors = data.get("total_errors", 0)
-        consecutive_failures = data.get("consecutive_failures", 0)
-        categories = data.get("categories", {})
 
-        if consecutive_failures >= 3 or total_errors >= 10:
-            unhealthy_sources.append(f"⚠️  {domain}: {consecutive_failures} consecutive failures, {total_errors} total errors")
-            # Show top error categories
-            if categories:
-                top_category = max(categories.items(), key=lambda x: x[1])
-                report += f"     Top error: {top_category[0]} ({top_category[1]} times)\n"
-
-    if unhealthy_sources:
-        report += "\nUnhealthy sources:\n" + "\n".join(unhealthy_sources)
-    else:
-        report += "✅ All sources operating normally."
-
-    return report
-
-def track_error(source_url: str, error_type: str, error_message: str, error_tracking: Dict = None):
-    """Track an error for a source using the existing error tracking system."""
-    if error_tracking is None:
-        error_tracking = load_error_tracking()
-    
-    # Track the error using the existing function
-    updated_tracking = track_source_error(source_url, error_message, error_tracking)
-    save_error_tracking(updated_tracking)
 
 def init_database(db_file: str = "news_reader.db"):
     """Initialize the SQLite database with required tables."""
@@ -1738,21 +1639,7 @@ def init_database(db_file: str = "news_reader.db"):
         )
     ''')
 
-    # Create error_tracking table
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS error_tracking (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            domain TEXT UNIQUE NOT NULL,
-            total_errors INTEGER DEFAULT 0,
-            categories TEXT,  -- JSON string of error categories
-            last_error TEXT,
-            first_error TEXT,
-            consecutive_failures INTEGER DEFAULT 0,
-            last_success TEXT,
-            created_at REAL DEFAULT (datetime('now')),
-            updated_at REAL DEFAULT (datetime('now'))
-        )
-    ''')
+
 
     # Create overviews table
     cursor.execute('''
@@ -1769,7 +1656,6 @@ def init_database(db_file: str = "news_reader.db"):
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_articles_timestamp ON articles(timestamp)')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_articles_category ON articles(category)')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_articles_source ON articles(source)')
-    cursor.execute('CREATE INDEX IF NOT EXISTS idx_error_tracking_domain ON error_tracking(domain)')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_overviews_date ON overviews(date)')
 
     conn.commit()
@@ -1818,38 +1704,7 @@ def migrate_json_to_sqlite():
         except Exception as e:
             print(f"⚠️ Error reading summaries.json: {e}")
 
-    # Migrate error_tracking.json
-    if os.path.exists("error_tracking.json"):
-        print("📄 Migrating error_tracking.json...")
-        try:
-            with open("error_tracking.json", "r", encoding="utf-8") as f:
-                error_data = json.load(f)
 
-            migrated_count = 0
-            for domain, data in error_data.items():
-                try:
-                    cursor.execute('''
-                        INSERT OR REPLACE INTO error_tracking
-                        (domain, total_errors, categories, last_error, first_error, consecutive_failures, last_success)
-                        VALUES (?, ?, ?, ?, ?, ?, ?)
-                    ''', (
-                        domain,
-                        data.get('total_errors', 0),
-                        json.dumps(data.get('categories', {})),
-                        data.get('last_error'),
-                        data.get('first_error'),
-                        data.get('consecutive_failures', 0),
-                        data.get('last_success')
-                    ))
-                    migrated_count += 1
-                except Exception as e:
-                    print(f"⚠️ Error migrating error tracking for {domain}: {e}")
-                    continue
-
-            print(f"✅ Migrated {migrated_count} error tracking records")
-
-        except Exception as e:
-            print(f"⚠️ Error reading error_tracking.json: {e}")
 
     conn.commit()
     conn.close()
@@ -1928,62 +1783,7 @@ def save_summaries_to_db(summaries: Dict, db_file: str = "news_reader.db"):
     conn.commit()
     conn.close()
 
-def load_error_tracking_from_db(db_file: str = "news_reader.db") -> Dict:
-    """Load error tracking from SQLite database."""
-    if not os.path.exists(db_file):
-        init_database(db_file)
 
-    conn = sqlite3.connect(db_file)
-    cursor = conn.cursor()
-
-    error_tracking = {}
-    cursor.execute('SELECT domain, total_errors, categories, last_error, first_error, consecutive_failures, last_success FROM error_tracking')
-
-    for row in cursor.fetchall():
-        domain, total_errors, categories_json, last_error, first_error, consecutive_failures, last_success = row
-
-        try:
-            categories = json.loads(categories_json) if categories_json else {}
-        except:
-            categories = {}
-
-        error_tracking[domain] = {
-            'total_errors': total_errors,
-            'categories': categories,
-            'last_error': last_error,
-            'first_error': first_error,
-            'consecutive_failures': consecutive_failures,
-            'last_success': last_success
-        }
-
-    conn.close()
-    return error_tracking
-
-def save_error_tracking_to_db(error_data: Dict, db_file: str = "news_reader.db"):
-    """Save error tracking to SQLite database."""
-    if not os.path.exists(db_file):
-        init_database(db_file)
-
-    conn = sqlite3.connect(db_file)
-    cursor = conn.cursor()
-
-    for domain, data in error_data.items():
-        cursor.execute('''
-            INSERT OR REPLACE INTO error_tracking
-            (domain, total_errors, categories, last_error, first_error, consecutive_failures, last_success, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
-        ''', (
-            domain,
-            data.get('total_errors', 0),
-            json.dumps(data.get('categories', {})),
-            data.get('last_error'),
-            data.get('first_error'),
-            data.get('consecutive_failures', 0),
-            data.get('last_success')
-        ))
-
-    conn.commit()
-    conn.close()
 
 def load_settings(settings_file: str = "settings.json") -> Dict:
     """Load settings from JSON file."""
@@ -2047,7 +1847,7 @@ def detect_source_type(url: str) -> str:
     ]
 
     url_lower = url.lower()
-    if any(indicator in url_lower for indicator in rss_indicators):
+    if any(indicator in url_lower for indicator in rss_indicators) or "youtube.com/feeds/videos.xml" in url_lower:
         return "rss"
 
     # If it doesn't match RSS patterns, assume it's a website to scrape
@@ -2142,22 +1942,6 @@ def save_summaries(file_path: str, data: dict):
 def summarize_rss_feed(rss_url: str, summarizer: Summarizer, summaries: Dict, content_extractor: ContentExtractor, prompt: str, timeout: int = 120, output_channels: Optional[List[Any]] = None):
     print(f"🔍 summarize_rss_feed called for: {rss_url}")
     print(f"🔍 output_channels provided: {len(output_channels) if output_channels else 0} channels")
-    """
-    Process an RSS feed, extract articles, and generate summaries.
-
-    Fetches RSS feed entries, checks for new content, extracts full article content
-    if RSS summaries are insufficient, summarizes using provided summarizer, and categorizes articles.
-
-    Args:
-        rss_url: URL of the RSS feed to process
-        summarizer: Summarizer instance to use for text summarization
-        summaries: Dictionary to store processed summaries
-        content_extractor: Content extractor for fetching full article content
-        prompt: Summarization prompt
-        timeout: Request timeout in seconds
-        output_channels: List of output channels to send summaries to
-    """
-    error_tracking = load_error_tracking()
 
     try:
         print(f"📡 Processing RSS feed: {rss_url}")
@@ -2167,14 +1951,11 @@ def summarize_rss_feed(rss_url: str, summarizer: Summarizer, summaries: Dict, co
         if feed.bozo:  # Check if there was a parsing error
             error_msg = f"RSS parsing error for {rss_url}: {feed.bozo_exception}"
             print(f"❌ {error_msg}")
-            # Track the error
-            track_error(rss_url, "rss_parsing", str(feed.bozo_exception))
             return
 
         if hasattr(feed, 'status') and feed.status >= 400:
             error_msg = f"HTTP error {feed.status} for {rss_url}"
             print(f"❌ {error_msg}")
-            track_error(rss_url, "http_error", f"Status: {feed.status}")
             return
 
         feed_title = feed.feed.get('title', rss_url)
@@ -2183,28 +1964,23 @@ def summarize_rss_feed(rss_url: str, summarizer: Summarizer, summaries: Dict, co
 
         if len(feed.entries) == 0:
             print(f"⚠️ No entries found in RSS feed {rss_url} - feed might be empty or unreachable")
-            track_error(rss_url, "empty_feed", "No entries found")
             return
 
     except requests.exceptions.Timeout as e:
         error_msg = f"Timeout fetching RSS feed {rss_url} (30s timeout)"
         print(f"❌ {error_msg}")
-        track_error(rss_url, "timeout", str(e))
         return
     except requests.exceptions.ConnectionError as e:
         error_msg = f"Connection error fetching RSS feed {rss_url} - network unreachable"
         print(f"❌ {error_msg}")
-        track_error(rss_url, "connection_error", str(e))
         return
     except requests.exceptions.RequestException as e:
         error_msg = f"Network error fetching RSS feed {rss_url}: {e}"
         print(f"❌ {error_msg}")
-        track_error(rss_url, "network_error", str(e))
         return
     except Exception as e:
         error_msg = f"Unexpected error processing RSS feed {rss_url}: {e}"
         print(f"❌ {error_msg}")
-        track_error(rss_url, "unexpected_error", str(e))
         return
 
     # Initialize feed entry in summaries if not exists
@@ -2292,9 +2068,7 @@ def summarize_rss_feed(rss_url: str, summarizer: Summarizer, summaries: Dict, co
 
         save_summaries_to_db(summaries, "news_reader.db")  # Save progress incrementally
 
-        # Track successful processing
-        track_source_success(rss_url, error_tracking)
-        save_error_tracking_to_db(error_tracking)
+
 
 def read_urls_from_file(filepath: str) -> List[str]:
     """Read URLs from file, supporting flat format, grouped format, and JSON format."""
@@ -2991,7 +2765,6 @@ def process_website(url: str, summarizer: Summarizer, content_extractor: Content
     """Process a website URL by scraping content and summarizing articles."""
     print(f"\n🌐 Scraping: {url}")
 
-    error_tracking = load_error_tracking()
     processing_error = None
 
     try:
@@ -3019,13 +2792,10 @@ def process_website(url: str, summarizer: Summarizer, content_extractor: Content
                 print(f"📺 Title: {title}")
                 print("🔹 Summarizing transcript...")
                 process_single_article(url, title, transcript, summarizer, summaries, output_channels, prompt, timeout)
-                track_source_success(url, error_tracking)
-                save_error_tracking_to_db(error_tracking)
-                return
+                return # Exit after processing YouTube video
             else:
                 processing_error = f"Could not extract transcript: {transcript}"
                 print(f"⚠️ {processing_error}")
-
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
         }
@@ -3046,10 +2816,10 @@ def process_website(url: str, summarizer: Summarizer, content_extractor: Content
                 title, content = scrape_article_content(url, timeout)
                 if content and not content.startswith("[Error"):
                     process_single_article(url, title, content, summarizer, summaries, output_channels, prompt, timeout)
-                    track_source_success(url, error_tracking)
                 else:
                     processing_error = "No article links found and failed to extract content"
-                return
+                return # Exit after processing the single page
+
 
             # Process each article
             articles_processed = 0
@@ -3068,21 +2838,16 @@ def process_website(url: str, summarizer: Summarizer, content_extractor: Content
                     print(f"⚠️ Error processing article {article_url}: {e}")
                     continue
 
-            print(f"✅ Processed {articles_processed} articles from {url}")
-            if articles_processed > 0:
-                track_source_success(url, error_tracking)
-            else:
-                processing_error = f"No articles could be processed from {len(article_links)} links"
 
-        else:
+
+        else: # For if is_listing_page
             # Single article page - try to get full content
-            content = get_full_article_content(url, timeout)
+            content, thumbnail_url = content_extractor.extract_from_url(url, timeout) # Use content_extractor
             if content and not content.startswith("[Error"):
                 title, _ = scrape_article_content(url, timeout)  # Get title from scraping
                 print(f"📄 Title: {title}")
                 print("🔹 Summarizing content...")
                 process_single_article(url, title, content, summarizer, summaries, output_channels, prompt, timeout)
-                track_source_success(url, error_tracking)
             else:
                 processing_error = f"Failed to extract content from {url}"
 
@@ -3090,11 +2855,7 @@ def process_website(url: str, summarizer: Summarizer, content_extractor: Content
         processing_error = str(e)
         print(f"⚠️ Error processing website {url}: {processing_error}")
 
-    # Track error if processing failed
-    if processing_error:
-        track_source_error(url, processing_error, error_tracking)
 
-    save_error_tracking(error_tracking)
 
 def extract_youtube_title(video_url: str, timeout: int = 30) -> str:
     """Extract title from YouTube video page."""
@@ -3269,6 +3030,7 @@ if __name__ == "__main__":
     parser.add_argument("--article-prompt", default=settings.get("prompts", {}).get("article_summary", "Summarize this article briefly:"), help="Custom prompt for article summarization")
     parser.add_argument("--overview-prompt", default=settings.get("prompts", {}).get("overview_summary", "Based on the following news summaries, provide a comprehensive overview..."), help="Custom prompt for overview generation")
     parser.add_argument("--interval", "-i", type=int, help="Run in a loop with specified interval in minutes (for continuous monitoring)")
+    parser.add_argument("--run-once", action="store_true", help="Run once and exit, do not enter continuous monitoring mode")
     args = parser.parse_args(remaining)
 
     # Setup timezone and overview scheduling
@@ -3324,9 +3086,7 @@ if __name__ == "__main__":
             print("❌ Failed to export overview")
         sys.exit(0)
 
-    # Initialize database and load data
-    init_database("news_reader.db")
-    error_tracking = load_error_tracking_from_db()
+
 
     # Refactor: Use parse_source_groups to get all source info directly
     source_groups: Dict[str, SourceGroup] = {}
@@ -3396,48 +3156,40 @@ if __name__ == "__main__":
     print("🔍 Processing sources with channel routing...")
     rss_count = 0
     website_count = 0
-    skipped_sources = 0
 
     for group_name, group in source_groups.items():
         group_output_channels = config.get_output_channels(group.output_channels if group.output_channels else None)
         group_article_prompt = group.prompt if group.prompt else settings.get("prompts", {}).get("article_summary", "Summarize this article briefly:")
 
         for url in group.urls:
-            # Check if source should be excluded due to excessive failures
-            if should_exclude_source(url, error_tracking):
-                print(f"🚫 Skipping unreliable source: {url}")
-                skipped_sources += 1
-                continue
-
             source_type = detect_source_type(url)
 
-            if args.scrape or source_type == "website":
-                print(f"🌐 Scraping website: {url}")
-                print(f"   📤 Channels for this URL: {[type(ch).__name__ for ch in group_output_channels]}")
-                process_website(url, summarizer, content_extractor, summaries, group_output_channels, group_article_prompt, args.timeout)
-                website_count += 1
-            else:  # RSS feed
+            if source_type == "rss":
                 print(f"📡 Processing RSS feed: {url}")
                 print(f"   📤 Channels for this URL: {[type(ch).__name__ for ch in group_output_channels]}")
                 summarize_rss_feed(url, summarizer, summaries, content_extractor, group_article_prompt, args.timeout, group_output_channels)
                 rss_count += 1
+            else:  # Assume website, apply scraping logic
+                print(f"🌐 Scraping website: {url}")
+                print(f"   📤 Channels for this URL: {[type(ch).__name__ for ch in group_output_channels]}")
+                process_website(url, summarizer, content_extractor, summaries, group_output_channels, group_article_prompt, args.timeout)
+                website_count += 1
 
     # Report final statistics
     print(f"\n✅ Processing complete: {rss_count} RSS feeds, {website_count} websites processed")
-    if skipped_sources > 0:
-        print(f"🚫 Skipped {skipped_sources} unreliable sources")
     print(f"📄 Summaries saved to: {args.output}")
 
-    # Show health report if there are tracked errors
-    if error_tracking:
-        print("\n" + "="*60)
-        health_report = report_source_health(error_tracking)
-        print(health_report)
-        print("="*60)
+
 
     # Handle continuous running with interval
     # Use command line arg if provided, otherwise use config setting
     run_interval = args.interval if args.interval and args.interval > 0 else config.get_interval()
+
+    # If --run-once is specified, override run_interval to 0 and ensure single execution
+    if args.run_once:
+        run_interval = 0
+        print("💡 Running once and exiting (--run-once specified).")
+
 
     if run_interval > 0:
         import time
@@ -3470,35 +3222,28 @@ if __name__ == "__main__":
                 sources_file_path = settings.get('files', {}).get('sources', 'sources.txt')
                 source_groups = parse_source_groups(sources_file_path, settings)
                 
-                summaries = load_summaries_from_db("news_reader.db")
-                error_tracking = load_error_tracking_from_db("news_reader.db")
+
 
                 rss_count = 0
                 website_count = 0
-                skipped_sources = 0
 
                 for group_name, group in source_groups.items():
                     group_output_channels = config.get_output_channels(group.output_channels if group.output_channels else None)
                     group_article_prompt = group.prompt if group.prompt else settings.get("prompts", {}).get("article_summary", "Summarize this article briefly:")
 
                     for url in group.urls:
-                        if should_exclude_source(url, error_tracking):
-                            print(f"🚫 Skipping unreliable source: {url}")
-                            skipped_sources += 1
-                            continue
-
                         source_type = detect_source_type(url)
 
-                        if args.scrape or source_type == "website":
-                            print(f"🌐 Scraping website: {url}")
-                            print(f"   📤 Channels for this URL: {[type(ch).__name__ for ch in group_output_channels]}")
-                            process_website(url, summarizer, content_extractor, summaries, group_output_channels, group_article_prompt, args.timeout)
-                            website_count += 1
-                        else:  # RSS feed
+                        if source_type == "rss":
                             print(f"📡 Processing RSS feed: {url}")
                             print(f"   📤 Channels for this URL: {[type(ch).__name__ for ch in group_output_channels]}")
                             summarize_rss_feed(url, summarizer, summaries, content_extractor, group_article_prompt, args.timeout, group_output_channels)
                             rss_count += 1
+                        else:  # Assume website, apply scraping logic
+                            print(f"🌐 Scraping website: {url}")
+                            print(f"   📤 Channels for this URL: {[type(ch).__name__ for ch in group_output_channels]}")
+                            process_website(url, summarizer, content_extractor, summaries, group_output_channels, group_article_prompt, args.timeout)
+                            website_count += 1
 
                 # Generate overview if requested
                 if args.overview:
@@ -3532,8 +3277,6 @@ if __name__ == "__main__":
                         print("="*80)
 
                 print(f"\n✅ Scheduled run complete: {rss_count} RSS feeds, {website_count} websites processed")
-                if skipped_sources > 0:
-                    print(f"🚫 Skipped {skipped_sources} unreliable sources")
 
                 print(f"⏰ Next run in {run_interval} minutes...")
 
