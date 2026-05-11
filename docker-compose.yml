@@ -1,13 +1,9 @@
 services:
-  news-reader:
+  news-snek:
     build:
       context: .
       dockerfile: Dockerfile
-      pull: true
-    container_name: news-reader
+    container_name: news-snek
     volumes:
       - /opt/newsnek:/app/data
-    environment:
-      - PYTHONPATH=/app
     restart: unless-stopped
-    command: ["python3", "newsnek.py", "--workdir", "/app/data"]

@@ -1,96 +1,84 @@
-# NewsSnek (News Reader & Summarizer)
+# NewsSnek
 
-A lightweight Python application that pulls RSS feeds and webpages, extracts the main content, summarizes it with an LLM, and outputs the summary to console or chat platforms. Designed for quick deployment with Docker.
+A lightweight, Docker-ready news aggregator and summarizer. It pulls RSS feeds and YouTube content, uses AI (Ollama or OpenRouter) to summarize them, and delivers the results to your preferred channels (Discord, Telegram, or Console).
 
-## Features
-- **JSON‑based source groups** with customizable prompts
-- **Multi‑channel output** (console, Discord, Telegram, etc.)
-- **Container‑friendly**: runs inside a minimal Python image, persisting data to a mounted volume
-- **Hot‑reload** of configuration via `settings.json` or `sources.json`
-- **Extensible**: add new providers or output channels via plug‑in interface
+## 🚀 Quick Start (Docker)
 
-## Project Layout
-```
-├── Dockerfile
-├── docker-entrypoint.sh   # Sets up data dir and symlinks settings/files
-├── newsnek.py
-├── migrate_sources.py
-├── settings.json          # Runtime config (create from settings.example.json)
-├── sources.json           # JSON source definition (create from sources.example.json)
-├── requirements.txt
-└── …
-```
+The easiest way to get running is using Docker.
 
-## Prerequisites
-- Docker 18.09+ or Podman
-- An Ollama server running (or any other provider you wish to configure)
-
-## Docker Setup
+### 1. Prepare your data directory
+The application persists all settings, sources, and the SQLite database in a single directory on your host.
 ```bash
-# 1. Pull or build the image
-# Build locally
+sudo mkdir -p /opt/newsnek
+sudo chown -R $USER:$USER /opt/newsnek
+```
+
+### 2. Run with Docker
+Build and run the container in one command:
+```bash
 docker build -t news-snek .
-
-# 2. Create a data directory on the host and give ownership to UID 1000
-sudo mkdir -p /opt/news-snek
-sudo chown -R 1000:1000 /opt/news-snek
-
-# 3. Run the container
-# Mount the data directory so settings, sources, and DB persist between restarts
-# The first run will create default `settings.json` and `sources.json`
-# Edit these files on the host to customize your feeds and channels
-
-docker run \
+docker run -d \
   --name news-snek \
-  -v /opt/news-snek:/app/data \
-  -p 8080:8080 \
+  -v /opt/newsnek:/app/data \
   news-snek
 ```
 
-### Docker Compose
-You can also use the included `docker-compose.yml`:
-```yaml
-version: "3"
-services:
-  news-snek:
-    build: .
-    volumes:
-      - /opt/news-snek:/app/data
-    restart: unless-stopped
+### 3. Configure
+The first run will create default templates in `/opt/newsnek`. Edit these to set up your feeds and AI providers:
+* `/opt/newsnek/settings.json` — AI credentials and output channels.
+* `/opt/newsnek/sources.json` — Your news feeds and groups.
+
+---
+
+## 🛠 Project Structure
+
+```
+.
+├── Dockerfile
+├── README.md
+├── requirements.txt
+├── run-newsnek.sh       # Container entrypoint wrapper
+├── src/                 # Main application logic
+│   ├── app.py           # Entry point
+│   ├── config.py        # Configuration management
+│   ├── database.py      # SQLite integration
+│   ├── extractor.py     # Content scraping
+│   ├── output_channels.py
+│   └── summarizers.py
+└── .gitignore           # Protects credentials and local data
 ```
 
-## Configuration
-See the web‑style docs in the repository or run:
-```bash
-python3 newsnek.py --help
-```
+## ⚙️ Configuration Details
 
-### Settings (`settings.json`)
-- `ollama`, `openrouter`, etc. providers
-- `files.s` for source and DB paths
-- `output.channels` mapping
-- `interval` in seconds
+### AI Providers
+Supported providers include:
+* **OpenRouter**: Requires an `api_key` in `settings.json`.
+* **Ollama**: Requires an `api_url` (e.g., `http://host.docker.internal:11434`).
 
-### Sources (`sources.json`)
-Define groups with `description`, `channels`, `prompt`, and a list of URLs.
+### Data Persistence
+All runtime data is stored in `/app/data` inside the container, which maps to `/opt/newsnek` on your host:
+* `news_reader.db` — SQLite database.
+* `settings.json` — Runtime configuration.
+* `sources.json` — Feed definitions.
 
-## Usage
-```bash
-# One‑shot summary of current feeds
-python3 newsnek.py --once
+## 🧪 Local Development
 
-# Continuous monitoring
-python3 newsnek.py
-```
+If you want to run the application directly on your host (without Docker):
 
-## Testing
-```bash
-# Run unit tests (if any)
-pytest
-```
+1. **Install dependencies**:
+   ```bash
+   pip install -r requirements.txt
+   ```
+2. **Run the application**:
+   ```bash
+   python3 newsnek.py --debug
+   ```
+   *Note: Ensure your `settings.json` and `sources.json` are in the current directory or specify paths via command line arguments.*
 
-## Contributing
-Pull requests are welcome. Please run documentation checks and tests before submitting.
+## 🛡 Security & Best Practices
+* **Never commit `settings.json` or `sources.json`** to version control. They contain API keys and personal channel IDs.
+* Use the provided `settings.example.json` and `sources.example.json` as templates.
+* Always use the `.gitignore` provided to prevent accidental exposure of sensitive data.
 
-## License
+## 📜 License
 MIT
