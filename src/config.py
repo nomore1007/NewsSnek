@@ -1,190 +1,140 @@
-import json
+"""
+News Snek - Configuration Management
+Handles runtime reloading of settings.json and sources.json.
+"""
+
 import os
-from typing import Dict, Any, Optional, List
+import json
+import logging
+from typing import Dict, List, Any, Optional
+from .summarizers import ProviderRegistry, create_provider_from_config
 
-
-class SummarizerConfig:
-    """Configuration for a summarizer provider."""
-
-    def __init__(self, provider_type: str, **kwargs):
-        """
-        Initialize summarizer configuration.
-
-        Args:
-            provider_type: Type of summarizer ('ollama', etc.)
-            **kwargs: Provider-specific configuration options
-        """
-        self.provider_type = provider_type
-        self.options = kwargs
-
-
-class SummarizerResult:
-    """Result of a summarization operation."""
-
-    def __init__(self, success: bool, content: str = "", error: str = "", original_language: str = "", translated: bool = False):
-        """
-        Initialize summarizer result.
-
-        Args:
-            success: Whether the summarization was successful
-            content: The summarized content
-            error: Error message if failed
-            original_language: Detected language of original text
-            translated: Whether the text was translated before summarization
-        """
-        self.success = success
-        self.content = content
-        self.error = error
-        self.original_language = original_language
-        self.translated = translated
-
-
-class OutputChannelConfig:
-    """Configuration for an output channel."""
-
-    def __init__(self, channel_type: str, **kwargs):
-        """
-        Initialize output channel configuration.
-
-        Args:
-            channel_type: Type of output channel ('telegram', 'discord', 'console', etc.)
-            **kwargs: Channel-specific configuration options
-        """
-        self.channel_type = channel_type
-        self.options = kwargs
-
-
-class OutputChannelResult:
-    """Result of an output operation."""
-
-    def __init__(self, success: bool, message: str = "", error: str = ""):
-        """
-        Initialize output result.
-
-        Args:
-            success: Whether the output was successful
-            message: Success message or additional info
-            error: Error message if failed
-        """
-        self.success = success
-        self.message = message
-        self.error = error
-
+logger = logging.getLogger(__name__)
 
 class NewsReaderConfig:
-    """Centralized configuration management for the news reader."""
+    """
+    Centralized configuration management for the news reader.
+    Supports runtime reloading of settings and sources files.
+    """
 
-    def __init__(self, settings_file: str = "settings.json"):
-        """
-        Initialize configuration from file.
-
-        Args:
-            settings_file: Path to settings JSON file
-        """
+    def __init__(self, base_dir: str = ".", settings_file: str = "settings.json", sources_file: str = "sources.json"):
+        # Use absolute path for base_dir to avoid CWD issues
+        self.base_dir = os.path.abspath(base_dir)
         self.settings_file = settings_file
+        self.sources_file = sources_file
+        
+        self.settings: Dict[str, Any] = {}
+        self.sources: Dict[str, Any] = {}
+        self.registry = ProviderRegistry()
+        
+        # Initial load
+        self.reload()
+
+    def reload(self):
+        """
+        Reload settings and sources from disk.
+        Call this at the start of every processing cycle to ensure updates take effect.
+        """
+        logger.info(f"🔄 Reloading configuration from base_dir: {self.base_dir}")
         self._load_settings()
-        self._ensure_sources_file()
+        self._load_sources()
+        self._setup_providers()
+        logger.info("✅ Configuration reloaded successfully.")
 
     def _load_settings(self):
         """Load settings from JSON file with defaults."""
-        # Check for settings in multiple locations, prioritize /app/data
         settings_paths = [
-            "/app/data/settings.json",  # Priority 1: Mounted data directory
-            self.settings_file,          # Priority 2: Specified location
-            "settings.json",             # Priority 3: Current directory fallback
+            "/app/data/settings.json", 
+            os.path.join(self.base_dir, self.settings_file),
+            os.path.join(self.base_dir, "settings.json"),
         ]
 
         for path in settings_paths:
             if os.path.exists(path):
                 try:
-                    with open(path, 'r') as f:
+                    with open(path, 'r', encoding='utf-8') as f:
                         self.settings = json.load(f)
+                    logger.debug(f"Loaded settings from {path}")
                     return
                 except json.JSONDecodeError as e:
-                    print(f"⚠️ Invalid JSON in {path}: {e}")
-                    print(f"💡 Check for missing commas, quotes, or bracket mismatches")
+                    logger.error(f"❌ Invalid JSON in {path}: {e}")
                     continue
 
-        # Config files are created by Docker entrypoint, use defaults as fallback
+        # Fallback to defaults
+        logger.warning("⚠️ No valid settings file found. Using defaults.")
         self.settings = self._get_defaults()
-        self._save_settings()
 
-    def _ensure_sources_file(self):
-        """Ensure sources file exists (JSON or text), creating from settings or example if needed."""
-        sources_file = self.settings.get("files", {}).get("sources", "sources.txt")
+    def _load_sources(self):
+        """Load source groups from JSON or TXT file."""
+        sources_filename = self.settings.get("files", {}).get("sources", self.sources_file)
+        
+        if os.path.isabs(sources_filename):
+            sources_path = sources_filename
+        else:
+            sources_path = os.path.join(self.base_dir, sources_filename)
 
-        # Check if sources are defined inline in settings
+        # Check for inline sources in settings first
         if "sources" in self.settings and "groups" in self.settings["sources"]:
-            print("✅ Using inline sources from settings.json")
-            return  # Sources defined inline
+            self.sources = self.settings["sources"]
+            return
 
-        # Priority: JSON first (new format), then TXT (legacy)
-        sources_paths = [
-            "sources.json",      # Preferred JSON format
-            "sources.txt",       # Legacy text format
-            sources_file,        # Configured location (fallback)
-        ]
+        if os.path.exists(sources_path):
+            try:
+                if sources_path.endswith('.json'):
+                    with open(sources_path, 'r', encoding='utf-8') as f:
+                        self.sources = json.load(f)
+                else:
+                    self.sources = self._parse_legacy_sources(sources_path)
+                return
+            except Exception as e:
+                logger.error(f"❌ Failed to load sources from {sources_path}: {e}")
 
-        for path in sources_paths:
-            if os.path.exists(path):
-                # Update settings to point to the found file
-                self.settings["files"]["sources"] = path
-                return  # File found
+        self.sources = {"groups": {}}
 
-        # Create default sources file (TXT format for simplicity)
-        self._create_default_sources_text("sources.txt")
-
-    def _create_default_sources_json(self, filepath: str):
-        """Create default sources file in JSON format."""
-        default_sources = {
+    def _parse_legacy_sources(self, filepath: str) -> Dict:
+        """Convert legacy .txt sources to the internal group structure."""
+        urls = []
+        with open(filepath, 'r', encoding='utf-8') as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith('#'):
+                    urls.append(line)
+        
+        return {
             "groups": {
-                "general-news": {
-                    "description": "General news sources for all channels",
-                    "channels": [],
+                "default": {
+                    "description": "Legacy sources from text file",
+                    "channels": ["console"],
                     "prompt": None,
-                    "sources": [
-                        "https://feeds.bbci.co.uk/news/rss.xml",
-                        "https://rss.cnn.com/rss/edition.rss"
-                    ]
-                },
-                "tech-news": {
-                    "description": "Technology news for Discord",
-                    "channels": ["discord"],
-                    "prompt": None,
-                    "sources": [
-                        "https://feeds.feedburner.com/TechCrunch/",
-                        "https://www.reddit.com/r/technology/.rss"
-                    ]
+                    "sources": urls
                 }
             }
         }
 
-        with open(filepath, 'w', encoding='utf-8') as f:
-            json.dump(default_sources, f, indent=2, ensure_ascii=False)
+    def _setup_providers(self):
+        """Initialize the ProviderRegistry based on named providers in settings.json."""
+        providers_cfg = self.settings.get("providers", {})
+        if not providers_cfg:
+            logger.warning("⚠️ No 'providers' registry found in settings.json. AI features may fail.")
+            return
 
-        print(f"✅ Created default {filepath} with sample grouped sources")
+        # Reset registry
+        self.registry = ProviderRegistry()
 
-    def _create_default_sources_text(self, filepath: str):
-        """Create default sources file in text format (legacy)."""
-        with open(filepath, 'w') as f:
-            f.write("# Add your RSS feeds and websites here\n")
-            f.write("# RSS feeds (automatically detected)\n")
-            f.write("https://feeds.bbci.co.uk/news/rss.xml\n")
-            f.write("https://rss.cnn.com/rss/edition.rss\n")
-            f.write("\n")
-            f.write("# Websites for scraping (automatically detected)\n")
-            f.write("# https://example.com/news\n")
-        print(f"✅ Created default {filepath} with sample feeds")
+        for name, cfg in providers_cfg.items():
+            try:
+                p_type = cfg.get("type")
+                # The 'config' is the whole dict minus the 'type' key (flat structure)
+                p_config = {k: v for k, v in cfg.items() if k != 'type'}
+                
+                provider_instance = create_provider_from_config(p_type, name, p_config)
+                self.registry.register(name, provider_instance)
+            except Exception as e:
+                logger.error(f"❌ Failed to register provider '{name}': {e}")
 
     def _get_defaults(self) -> Dict:
-        """Get default settings."""
         return {
-            "ollama": {
-                "host": "localhost",
-                "model": "smollm2:135m",
-                "overview_model": "llama2",
-                "timeout": 120
-            },
+            "providers": {},
             "processing": {
                 "max_overview_summaries": 50,
                 "scrape_timeout": 30,
@@ -192,147 +142,30 @@ class NewsReaderConfig:
             },
             "prompts": {
                 "article_summary": "Summarize this article briefly:",
-                "overview_summary": "Based on the following news summaries, provide a comprehensive overview..."
+                "overview_summary": "Provide a comprehensive overview..."
             },
             "files": {
-                "sources": "sources.txt",
+                "sources": "sources.json",
                 "database": "news_reader.db"
             },
-            "summarizer": {
-                "provider": "ollama",
-                "config": {
-                    "host": "localhost",
-                    "model": "smollm2:135m",
-                    "timeout": 120,
-                    "preferred_language": "en"
-                }
-            },
-            "output": [
-                {
-                    "type": "console",
-                    "config": {
-                        "output_file": None
-                    }
-                }
-            ],
             "interval": 60
         }
 
-    def _save_settings(self):
-        """Save current settings to file."""
-        try:
-            with open(self.settings_file, 'w') as f:
-                json.dump(self.settings, f, indent=2)
-        except Exception as e:
-            print(f"Warning: Could not save settings: {e}")
-
-    def get_summarizer_config(self) -> SummarizerConfig:
-        """Get configuration for the summarizer."""
-        summarizer_settings = self.settings.get('summarizer', {})
-        provider = summarizer_settings.get('provider', 'ollama')
-        config_options = summarizer_settings.get('config', {})
-
-        # For backward compatibility, use ollama settings if no summarizer config
-        if not config_options and provider == 'ollama':
-            config_options = self.settings.get('ollama', {})
-
-        return SummarizerConfig(provider, **config_options)
-
     def get(self, key: str, default: Any = None) -> Any:
-        """Get a setting value."""
-        return self.settings.get(key, default)
+        keys = key.split('.')
+        val = self.settings
+        try:
+            for k in keys:
+                val = val[k]
+            return val
+        except (KeyError, TypeError):
+            return default
 
-    def set(self, key: str, value: Any):
-        """Set a setting value and save."""
-        self.settings[key] = value
-        self._save_settings()
+    def get_source_groups(self) -> Dict[str, Any]:
+        return self.sources.get("groups", {})
 
-    def get_output_channels(self, channel_names: Optional[List[str]] = None) -> List[Any]:
-        """
-        Get configured output channels.
-
-        Args:
-            channel_names: Optional list of channel names to filter by.
-                         If None, returns all available channels.
-
-        Returns:
-            List of configured output channel instances
-        """
-        output_settings = self.settings.get('output', {})
-
-        # Support both old array format and new named channels format
-        if isinstance(output_settings, list):
-            return self._get_output_channels_legacy(output_settings, channel_names)
-        else:
-            return self._get_output_channels_named(output_settings, channel_names)
-
-    def _get_output_channels_legacy(self, output_settings: List[Dict], channel_names: Optional[List[str]] = None) -> List[Any]:
-        """Get output channels from legacy array format."""
-        channels = []
-
-        for output_channel in output_settings:
-            channel_type = output_channel.get('type')
-            if channel_type:
-                config = OutputChannelConfig(channel_type, **output_channel.get('config', {}))
-                try:
-                    channel = OutputChannelFactory.create_channel(config)
-                    if channel.is_available():
-                        channels.append(channel)
-                    else:
-                        print(f"Warning: Output channel '{channel_type}' not available (not configured)")
-                except ValueError as e:
-                    print(f"Warning: {e}")
-
-        return channels
-
-    def _get_output_channels_named(self, output_settings: Dict, channel_names: Optional[List[str]] = None) -> List[Any]:
-        """Get output channels from named channels format."""
-        channels = []
-        groups = output_settings.get('groups', {})
-
-        # If no specific channel names requested, get all channels
-        if channel_names is None:
-            channel_names = list(output_settings.get('channels', {}).keys())
-
-        # Expand groups to channel names
-        all_channel_names = []
-        for name in channel_names:
-            if name in groups:
-                group_channels = groups[name]
-                if isinstance(group_channels, list):
-                    all_channel_names.extend(group_channels)
-                else:
-                    print(f"Warning: Group '{name}' should be a list of channel names")
-            else:
-                all_channel_names.append(name)
-
-        for channel_name in set(all_channel_names):
-            channel_config = output_settings.get('channels', {}).get(channel_name)
-            if channel_config:
-                channel_type = channel_config.get('type')
-                if channel_type:
-                    config = OutputChannelConfig(channel_type, **channel_config.get('config', {}))
-                    try:
-                        channel = OutputChannelFactory.create_channel(config)
-                        if channel.is_available():
-                            channels.append(channel)
-                        else:
-                            print(f"Warning: Output channel '{channel_name}' ({channel_type}) not available (not configured)")
-                    except ValueError as e:
-                        print(f"Warning: {e}")
-            else:
-                print(f"Warning: Output channel '{channel_name}' not found in configuration")
-
-        return channels
+    def get_output_channel_configs(self) -> Dict[str, Any]:
+        return self.settings.get("output", {}).get("channels", {})
 
     def get_interval(self) -> int:
-        """Get the run interval in minutes from settings or environment."""
-        import os
-        # First check settings file, then environment variable
-        interval = self.settings.get('interval', os.getenv('INTERVAL'))
-        if interval is None:
-            return 60  # Default 60 minutes
-        try:
-            return int(interval)
-        except (ValueError, TypeError):
-            return 60  # Default if invalid
+        return int(self.get("interval", 60))

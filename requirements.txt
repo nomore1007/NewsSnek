@@ -4,3 +4,4 @@ beautifulsoup4>=4.9.0
 youtube-transcript-api>=0.6.0
 langdetect>=1.0.0
 googletrans==4.0.0rc1
+pytz>=2023.3

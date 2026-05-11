@@ -1,97 +1,94 @@
+"""
+News Snek - Generalized Provider Infrastructure
+Handles different AI backends (Ollama, OpenRouter) and fallback chains.
+"""
+
+import logging
 import requests
-from urllib.parse import urlparse
-from typing import Protocol
 import json
+from abc import ABC, abstractmethod
+from typing import Dict, Optional, List, Any
 
-from .config import SummarizerConfig, SummarizerResult
+logger = logging.getLogger(__name__)
 
+# ============================================================================
+# PROVIDER INTERFACE
+# ============================================================================
 
-class Summarizer(Protocol):
-    """Protocol for text summarization providers."""
+class Provider(ABC):
+    """Base class for all AI providers."""
 
-    def is_available(self) -> bool:
-        """Check if the summarizer is available and properly configured."""
-        ...
-
-    def summarize(self, text: str, prompt: str = "Summarize this text:") -> SummarizerResult:
+    def __init__(self, name: str, config: Dict[str, Any]):
         """
-        Summarize the given text using the specified prompt.
+        Initialize the provider.
 
         Args:
-            text: The text to summarize
-            prompt: The summarization prompt
+            name: Unique name for this provider instance (e.g., 'ollama-smollm')
+            config: Provider-specific configuration dict
+        """
+        self.name = name
+        self.config = config
+
+    @abstractmethod
+    def summarize(self, text: str, prompt: str = "Summarize this:") -> str:
+        """
+        Generate a summary for the given text.
+
+        Args:
+            text: Input text to summarize
+            prompt: Prompt/instruction to use
 
         Returns:
-            SummarizerResult with the summary or error
+            Summarized text
+
+        Raises:
+            Exception: If the provider fails to generate a summary
         """
-        ...
+        pass
 
-
-class OllamaSummarizer:
-    """Ollama-based text summarizer."""
-
-    def __init__(self, config: SummarizerConfig):
+    @abstractmethod
+    def is_available(self) -> bool:
         """
-        Initialize Ollama summarizer.
+        Check if the provider is reachable/available.
 
-        Args:
-            config: Must contain 'host', 'model', and 'timeout' options
+        Returns:
+            True if available, False otherwise
         """
-        host_url = config.options.get('host', 'http://localhost:11434')
-        parsed = urlparse(host_url)
-        self.host = parsed.hostname
-        self.port = parsed.port or 11434
-        self.scheme = parsed.scheme
-        self.model = config.options.get('model', 'smollm2:135m')
-        self.timeout = config.options.get('timeout', 120)
-        self.preferred_language = config.options.get('preferred_language', 'en')
+        pass
+
+
+# ============================================================================
+# PROVIDER IMPLEMENTATIONS
+# ============================================================================
+
+class OllamaProvider(Provider):
+    """Ollama local LLM provider."""
+
+    def __init__(self, name: str, config: Dict[str, Any]):
+        super().__init__(name, config)
+        self.host = config.get("host", "http://localhost:11434")
+        self.model = config.get("model", "llama2")
+        self.timeout = config.get("timeout", 120)
 
     def is_available(self) -> bool:
-        """Check if Ollama service is accessible."""
         try:
-            # Simple health check by trying to reach the API
-            response = requests.get(f"{self.scheme}://{self.host}:{self.port}/api/tags", timeout=5)
+            response = requests.get(f"{self.host}/api/tags", timeout=5)
             return response.status_code == 200
-        except:
+        except Exception as e:
+            logger.warning(f"Ollama provider '{self.name}' unavailable: {e}")
             return False
 
-    def summarize(self, text: str, prompt: str = "Summarize this text:") -> SummarizerResult:
-        """
-        Summarize text using Ollama API with language processing.
+    def summarize(self, text: str, prompt: str = "Summarize this:") -> str:
+        url = f"{self.host}/api/generate"
+        payload = {
+            "model": self.model,
+            "prompt": f"{prompt}\n\n{text}",
+            "stream": True
+        }
 
-        Args:
-            text: Text to summarize
-            prompt: Summarization instruction
-
-        Returns:
-            SummarizerResult with summary or error
-        """
         try:
-            # Detect language of the input text
-            detected_language = self.detect_language(text)
-            translated = False
-            processed_text = text
-
-            # Translate to preferred language if different
-            if detected_language != 'unknown' and detected_language != self.preferred_language:
-                print(f"🌐 Detected language: {detected_language}, translating to {self.preferred_language}...")
-                processed_text = self.translate_text(text, self.preferred_language)
-                translated = True
-
-            payload = {
-                "model": self.model,
-                "prompt": f"{prompt}\n\n{processed_text}",
-                "stream": True
-            }
-
-            with requests.post(
-                f"{self.scheme}://{self.host}:{self.port}/api/generate",
-                json=payload,
-                stream=True,
-                timeout=self.timeout
-            ) as response:
+            with requests.post(url, json=payload, stream=True, timeout=self.timeout) as response:
                 response.raise_for_status()
-
                 summary = ""
                 for line in response.iter_lines():
                     if not line:
@@ -101,57 +98,147 @@ class OllamaSummarizer:
                         summary += data["response"]
                     if data.get("done"):
                         break
+                return summary.strip()
+        except requests.exceptions.RequestException as e:
+            raise Exception(f"Ollama request failed for {self.name}: {e}")
 
-                return SummarizerResult(
-                    success=True,
-                    content=summary.strip(),
-                    original_language=detected_language,
-                    translated=translated
-                )
 
-        except requests.exceptions.ConnectionError as e:
-            error_msg = f"❌ Cannot connect to Ollama server at {self.host}:{self.port}. Please ensure Ollama is running."
-            print(error_msg)
-            return SummarizerResult(success=False, error=error_msg)
-        except requests.exceptions.Timeout as e:
-            error_msg = f"⏰ Timeout connecting to Ollama server at {self.host}:{self.port} (timeout: {self.timeout}s)"
-            print(error_msg)
-            return SummarizerResult(success=False, error=error_msg)
-        except Exception as e:
-            error_msg = f"❌ Ollama summarization failed: {e}"
-            print(error_msg)
-            return SummarizerResult(success=False, error=error_msg)
+class OpenRouterProvider(Provider):
+    """OpenRouter (remote LLM) provider."""
 
-    def detect_language(self, text: str) -> str:
-        """Detect the language of the text."""
+    def __init__(self, name: str, config: Dict[str, Any]):
+        super().__init__(name, config)
+        self.api_key = config.get("api_key")
+        self.model = config.get("model", "openrouter/auto")
+        self.timeout = config.get("timeout", 120)
+
+        if not self.api_key:
+            raise ValueError(f"OpenRouter provider '{name}' missing api_key")
+
+    def is_available(self) -> bool:
+        # Simple check: do we have a key? (Real check would hit API, but we don't want to rate limit)
+        return bool(self.api_key)
+
+    def summarize(self, text: str, prompt: str = "Summarize this:") -> str:
+        url = "https://openrouter.ai/api/v1/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json"
+        }
+        payload = {
+            "model": self.model,
+            "messages": [
+                {"role": "user", "content": f"{prompt}\n\n{text}"}
+            ]
+        }
+
         try:
-            from langdetect import detect
-            return detect(text)
-        except ImportError:
-            return 'unknown'
-
-    def translate_text(self, text: str, target_language: str) -> str:
-        """Translate text to target language."""
-        try:
-            from googletrans import Translator
-            translator = Translator()
-            result = translator.translate(text, dest=target_language)
-            return result.text
-        except ImportError:
-            print("⚠️ Translation not available (googletrans not installed)")
-            return text
+            response = requests.post(url, json=payload, headers=headers, timeout=self.timeout)
+            response.raise_for_status()
+            result = response.json()
+            # OpenRouter response structure
+            return result["choices"][0]["message"]["content"].strip()
         except Exception as e:
-            print(f"⚠️ Translation failed: {e}")
-            return text
+            raise Exception(f"OpenRouter request failed for {self.name}: {e}")
 
 
-class SummarizerFactory:
-    """Factory for creating summarizer instances."""
+# ============================================================================
+# PROVIDER REGISTRY & CHAIN
+# ============================================================================
 
-    @staticmethod
-    def create_summarizer(config: SummarizerConfig) -> Summarizer:
-        """Create a summarizer instance based on configuration."""
-        if config.provider_type == 'ollama':
-            return OllamaSummarizer(config)
-        else:
-            raise ValueError(f"Unsupported summarizer provider: {config.provider_type}")
+class ProviderRegistry:
+    """Registry to manage named provider instances."""
+
+    def __init__(self):
+        self._providers: Dict[str, Provider] = {}
+
+    def register(self, name: str, provider: Provider):
+        self._providers[name] = provider
+        logger.info(f"Registered provider: {name} ({type(provider).__name__})")
+
+    def get(self, name: str) -> Optional[Provider]:
+        return self._providers.get(name)
+
+    def list_providers(self) -> List[str]:
+        return list(self._providers.keys())
+
+
+class ProviderChain:
+    """
+    A chain of providers that tries the next one if the previous fails.
+    Implements the "next_provider" fallback logic.
+    """
+
+    def __init__(self, name: str, provider_names: List[str], registry: ProviderRegistry):
+        """
+        Initialize the chain.
+
+        Args:
+            name: Name of this chain (e.g., "discord-chain")
+            provider_names: Ordered list of provider names to try
+            registry: The registry to look up providers
+        """
+        self.name = name
+        self.provider_names = provider_names
+        self.registry = registry
+
+    def summarize(self, text: str, prompt: str = "Summarize this:") -> str:
+        """
+        Try providers in order until one succeeds.
+
+        Raises:
+            Exception: If all providers in the chain fail
+        """
+        errors = []
+
+        for provider_name in self.provider_names:
+            provider = self.registry.get(provider_name)
+            if not provider:
+                logger.warning(f"Provider '{provider_name}' not found in registry, skipping")
+                continue
+
+            logger.info(f"Trying chain '{self.name}' with provider '{provider_name}'")
+
+            try:
+                # Check availability first (optional, but good practice)
+                if not provider.is_available():
+                    logger.warning(f"Provider '{provider_name}' is unavailable, trying next...")
+                    continue
+
+                # Attempt summarization
+                return provider.summarize(text, prompt)
+
+            except Exception as e:
+                logger.warning(f"Provider '{provider_name}' failed: {e}")
+                errors.append(f"{provider_name}: {str(e)}")
+                continue # Try next provider
+
+        # If we get here, all failed
+        raise Exception(f"Chain '{self.name}' failed. Errors: {'; '.join(errors)}")
+
+
+# ============================================================================
+# FACTORY
+# ============================================================================
+
+def create_provider_from_config(provider_type: str, name: str, config: Dict) -> Provider:
+    """
+    Factory to create a provider instance from config.
+
+    Args:
+        provider_type: Type of provider ('ollama', 'openrouter')
+        name: Name for the provider instance
+        config: Configuration dict for the provider
+
+    Returns:
+        Provider instance
+
+    Raises:
+        ValueError: If provider type is unknown
+    """
+    if provider_type == 'ollama':
+        return OllamaProvider(name, config)
+    elif provider_type == 'openrouter':
+        return OpenRouterProvider(name, config)
+    else:
+        raise ValueError(f"Unknown provider type: {provider_type}")

@@ -117,25 +117,17 @@ dmypy.json
 *.sqlite
 *.sqlite3
 
-# Generated data files
-summaries.json
-error_tracking.json
-daily_news_overview.txt
-overviews/
-
-# Configuration files (may contain secrets)
-# Note: settings.example.json is tracked, copy it to settings.json and customize
+# Configuration files (secrets)
 settings.json
+sources.json
 sources.txt
 
-# Log files
-*.log
+# Output files
+*.txt
 logs/
-
-# Temporary files
-*.tmp
-*.temp
-*~
+overviews/
+summaries.json
+error_tracking.json
 
 # IDE files
 .vscode/
@@ -150,5 +142,4 @@ logs/
 .Spotlight-V100
 .Trashes
 ehthumbs.db
-Thumbs.dbsettings*.json
-sources*.json
+Thumbs.db

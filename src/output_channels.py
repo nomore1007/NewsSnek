@@ -69,19 +69,47 @@ class ConsoleOutputChannel:
         except Exception as e:
             return OutputChannelResult(success=False, error=str(e))
 
-    def send_overview(self, overview: str, date: str) -> OutputChannelResult:
+    def send_summary(self, title: str, summary: str, source: str = "", url: str = "", thumbnail: str = None, author: str = "") -> OutputChannelResult:
+        """
+        Send a single article summary to console.
+        """
+        try:
+            lines = []
+            if source:
+                lines.append(f"Source: {source}")
+            lines.append(f"Title: {title}")
+            if author:
+                lines.append(f"Author: {author}")
+            lines.append(f"Summary: {summary}")
+            if url:
+                lines.append(f"URL: {url}")
+            lines.append("-" * 40)
+            
+            message = "\n".join(lines)
+            
+            if self.output_file:
+                with open(self.output_file, 'a', encoding='utf-8') as f:
+                    f.write(message + "\n")
+                return OutputChannelResult(success=True, message=f"Written to {self.output_file}")
+            else:
+                print(message)
+                return OutputChannelResult(success=True, message="Printed to console")
+        except Exception as e:
+            return OutputChannelResult(success=False, error=str(e))
+
+    def send_overview(self, overview: str, date: str, sources: list = None) -> OutputChannelResult:
         """
         Send overview to console.
-
-        Args:
-            overview: Overview content
-            date: Date string
-
-        Returns:
-            OutputChannelResult
         """
         title = f"News Overview - {date}"
-        return self.send(overview, title)
+        
+        message = overview
+        if sources:
+            unique_sources = sorted(list(set(sources)))
+            source_line = "Sources: " + ", ".join(unique_sources)
+            message = f"{source_line}\n\n{overview}"
+            
+        return self.send(message, title)
 
 
 class DiscordOutputChannel:
@@ -195,7 +223,7 @@ class DiscordOutputChannel:
         except Exception as e:
             return OutputChannelResult(success=False, error=f"Discord send failed: {e}")
     
-    def send_summary(self, title: str, summary: str, source: str = "", category: str = "", thumbnail: Optional[str] = None, url: str = "") -> OutputChannelResult:
+    def send_summary(self, title: str, summary: str, source: str = "", category: str = "", thumbnail: Optional[str] = None, url: str = "", author: str = "") -> OutputChannelResult:
         """
         Send summary to Discord via webhook or bot token.
 
@@ -206,9 +234,7 @@ class DiscordOutputChannel:
             category: Article category
             thumbnail: Article thumbnail URL (optional)
             url: Article URL
-
-        Returns:
-            OutputChannelResult with success status
+            author: Author or channel name (optional)
         """
         if not self.is_available():
             return OutputChannelResult(success=False, error="Discord not properly configured")
@@ -231,12 +257,22 @@ class DiscordOutputChannel:
             if thumbnail:
                 embed["image"] = {"url": thumbnail}
 
+            # Add fields for category and author if provided
+            fields = []
             if category:
-                embed["fields"] = [{
+                fields.append({
                     "name": "Category",
                     "value": category,
                     "inline": True
-                }]
+                })
+            if author:
+                fields.append({
+                    "name": "Author/Channel",
+                    "value": author,
+                    "inline": True
+                })
+            if fields:
+                embed["fields"] = fields
 
             if self.auth_method == 'webhook':
                 payload = {
@@ -262,19 +298,19 @@ class DiscordOutputChannel:
         except Exception as e:
             return OutputChannelResult(success=False, error=f"Discord send failed: {e}")
     
-    def send_overview(self, overview: str, date: str) -> OutputChannelResult:
+    def send_overview(self, overview: str, date: str, sources: list = None) -> OutputChannelResult:
         """
         Send overview to Discord.
-
-        Args:
-            overview: Overview content
-            date: Date string
-
-        Returns:
-            OutputChannelResult
         """
         title = f"Daily News Overview - {date}"
-        return self.send(overview, title)
+        
+        message = overview
+        if sources:
+            unique_sources = sorted(list(set(sources)))
+            source_line = "Sources: " + ", ".join(unique_sources)
+            message = f"{source_line}\n\n{overview}"
+            
+        return self.send(message, title)
 
 
 class OutputChannelFactory:
