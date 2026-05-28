@@ -200,7 +200,8 @@ class ContentExtractor:
             return transcript_text if transcript_text else "[Empty transcript]"
 
         except Exception as e:
-            return f"[Error extracting YouTube transcript: {e}]"
+            logger.warning(f"YouTube transcript extraction failed for {url}: {e}")
+            return None
 
     def _extract_main_content(self, soup: BeautifulSoup) -> str:
         """Extract main content from HTML soup.
