@@ -49,6 +49,8 @@ class ContentExtractor:
         Returns:
             Tuple of (content_text, thumbnail_url)
         """
+        # store URL for domain‑override logic in _extract_main_content
+        self.current_url = url
         if timeout is None:
             timeout = self.default_timeout
 
@@ -201,36 +203,75 @@ class ContentExtractor:
             return f"[Error extracting YouTube transcript: {e}]"
 
     def _extract_main_content(self, soup: BeautifulSoup) -> str:
-        """Extract main content from HTML soup."""
-        # Try multiple selectors for main content
+        """Extract main content from HTML soup.
+
+        The extractor works in two stages:
+        1. Find the most likely container that holds the article body (using a list of common selectors).
+        2. Clean out known noise elements (scripts, ads, comments, navigation, etc.).
+
+        After the generic extraction we apply **optional domain‑specific overrides**
+        defined in the configuration (``settings.json``) under the key
+        ``processing.domain_overrides``.  An override can specify:
+        * ``skip_prefix`` – number of initial paragraphs to drop (useful for
+          boilerplate intros or disclaimer blocks).
+        * ``root_selector`` – a CSS selector that narrows the extraction to a
+          specific subtree when the generic selectors pick up too much.
+        The configuration is completely optional; if a domain is not listed we
+        fall back to the generic behavior.
+        """
+        # 1 generic selector sweep
+        # Generic content selector sweep – order matters, the first match wins.
+        # The list is intentionally broad but will be pruned by domain‑specific overrides
+        # when found in settings.json.  The goal is to avoid grabbing nav, ads, or publisher promos.
         content_selectors = [
-            'article',
-            '[class*="content"]',
-            '[class*="article"]',
-            '[class*="post"]',
-            'main',
+            'article',            # Semantic article tag
+            '[role=article]',      # Accessible role
+            '[itemtype*="http://schema.org/Article"]',  # Schema.org marker
+            'main',               # Main content area
             '.entry-content',
-            '#content'
+            '#content',
+            '[class*=content]',   # Generic content containers
+            '[class*=article]',
+            '[class*=post]',
+            '.post',
         ]
 
+        content_elem = None
         for selector in content_selectors:
             content_elem = soup.select_one(selector)
             if content_elem:
-                # Remove unwanted elements
-                for unwanted in content_elem.select('script, style, nav, header, footer, aside, .ads, .comments'):
-                    unwanted.decompose()
+                break
 
-                text = content_elem.get_text(separator=' ', strip=True)
-                if len(text) > 100:  # Minimum content length
-                    return text
+        # 2 apply domain override if present
+        domain = ''
+        if hasattr(self, "current_url"):
+            domain = urlparse(self.current_url).netloc
+        overrides = self.config.get("processing.domain_overrides", {})
+        if domain in overrides:
+            root_sel = overrides[domain].get("root_selector")
+            if root_sel:
+                custom_elem = soup.select_one(root_sel)
+                if custom_elem:
+                    content_elem = custom_elem
 
-        # Fallback: extract from body
-        body = soup.find('body')
-        if body:
-            for unwanted in body.select('script, style, nav, header, footer, aside, .ads, .comments'):
+        # 3 cleanup and extract text
+        if not content_elem:
+            content_elem = soup.find('body')
+        if content_elem:
+            for unwanted in content_elem.select('script, style, nav, header, footer, aside, .ads, .comments'):
                 unwanted.decompose()
-            text = body.get_text(separator=' ', strip=True)
-            return text
+
+            text = content_elem.get_text(separator=' ', strip=True)
+            # 4 apply skip_prefix if configured
+            if domain in overrides and overrides[domain].get("skip_prefix"):
+                paragraphs = [p for p in text.split('\n\n') if p.strip()]
+                skip = overrides[domain]["skip_prefix"]
+                if len(paragraphs) > skip:
+                    text = '\n\n'.join(paragraphs[skip:])
+                else:
+                    text = ''
+            if len(text) > 100:
+                return text
 
         return "[Could not extract content]"
 
