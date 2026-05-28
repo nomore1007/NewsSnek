@@ -32,6 +32,15 @@ The first run will create default templates in `/opt/newsnek`. Edit these to set
 
 ## 🛠 Project Structure
 
+**New Features (since v2.0)**
+- **Robust YouTube transcript handling** – If a transcript cannot be fetched, the system now falls back to the video’s description/metadata and logs a warning instead of failing.
+- **Cookie‑based authentication** – Place a `cookies.txt` (Netscape format) in the project root to let the extractor perform authenticated transcript requests, bypassing YouTube’s bot‑checks.
+- **Automated email summaries** – Cron jobs can now pull and summarize the `News` folder at 7:45 AM weekdays and the `Inbox` folder hourly (8 AM‑4 PM) on workdays, delivering concise digests to Telegram.
+
+---
+
+## 🛠 Project Structure
+
 ```
 .
 ├── Dockerfile
