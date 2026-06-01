@@ -1,4 +1,1 @@
-VERSION=1.2.0
-BUILD_DATE=2025-01-19
-COMMIT=unknown
-DESCRIPTION=NewsSnek AI News Aggregator - Docker Edition
+0.1.0-alpha
