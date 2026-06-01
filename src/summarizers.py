@@ -182,12 +182,17 @@ class ProviderChain:
         self.provider_names = provider_names
         self.registry = registry
 
-    def summarize(self, text: str, prompt: str = "Summarize this:") -> str:
+    def summarize(self, text: str, prompt: str = "Summarize this:", silent_fail: bool = False) -> Optional[str]:
         """
         Try providers in order until one succeeds.
 
-        Raises:
-            Exception: If all providers in the chain fail
+        Args:
+            text: Text to summarize
+            prompt: Prompt to use
+            silent_fail: If True, return None instead of raising exception on failure
+
+        Returns:
+            The summary string, or None if all providers failed and silent_fail is True
         """
         errors = []
 
@@ -200,7 +205,7 @@ class ProviderChain:
             logger.info(f"Trying chain '{self.name}' with provider '{provider_name}'")
 
             try:
-                # Check availability first (optional, but good practice)
+                # Check availability first
                 if not provider.is_available():
                     logger.warning(f"Provider '{provider_name}' is unavailable, trying next...")
                     continue
@@ -214,7 +219,12 @@ class ProviderChain:
                 continue # Try next provider
 
         # If we get here, all failed
-        raise Exception(f"Chain '{self.name}' failed. Errors: {'; '.join(errors)}")
+        error_msg = f"Chain '{self.name}' failed. Errors: {'; '.join(errors)}"
+        if silent_fail:
+            logger.error(f"All providers in chain '{self.name}' failed. Silent fail enabled. {error_msg}")
+            return None
+        else:
+            raise Exception(error_msg)
 
 
 # ============================================================================

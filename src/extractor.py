@@ -5,6 +5,7 @@ Handles RSS parsing, web scraping, YouTube transcripts, and Internet Archive fal
 
 import logging
 import requests
+import os
 from urllib.parse import urljoin, quote, urlparse
 from typing import Tuple, Optional, List, Dict
 import feedparser
@@ -12,11 +13,11 @@ from bs4 import BeautifulSoup
 
 # YouTube Transcript handling (optional dependency)
 try:
-    from youtube_transcript_api import YouTubeTranscriptApi
+    import youtube_transcript_api as YTA_MODULE
     YOUTUBE_TRANSCRIPTS_AVAILABLE = True
 except ImportError:
     YOUTUBE_TRANSCRIPTS_AVAILABLE = False
-    YouTubeTranscriptApi = None
+    YTA_MODULE = None
 
 logger = logging.getLogger(__name__)
 
@@ -32,13 +33,14 @@ class ContentExtractor:
             config: NewsReaderConfig instance (provides settings like timeout, user_agent)
         """
         self.config = config
+        self.base_dir = config.base_dir
         # Get default timeout and user agent from config
         self.default_timeout = config.get("processing.scrape_timeout", 30)
         self.user_agent = config.get("processing.user_agent", 
                                     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
 
 
-    def extract_from_url(self, url: str, timeout: Optional[int] = None) -> Tuple[str, Optional[str]]:
+    def extract_from_url(self, url: str, timeout: Optional[int] = None) -> Tuple[Optional[str], Optional[str]]:
         """
         Extract content and thumbnail from a URL.
         
@@ -49,7 +51,7 @@ class ContentExtractor:
         Returns:
             Tuple of (content_text, thumbnail_url)
         """
-        # store URL for domain‑override logic in _extract_main_content
+        # store URL for domain-override logic in _extract_main_content
         self.current_url = url
         if timeout is None:
             timeout = self.default_timeout
@@ -74,12 +76,35 @@ class ContentExtractor:
             # Check for YouTube content
             if self._is_youtube_video_url(url):
                 transcript = self._extract_youtube_transcript(url)
-                if transcript and not any(transcript.startswith(prefix) for prefix in 
-                                         ['[Error', '[Could not', '[Invalid', '[YouTube']):
+                if transcript == "[YOUTUBE_PREMIERE]":
+                    logger.info(f"Skipping YouTube premiere: {url}")
+                    return None, thumbnail_url
+                if transcript:
                     return transcript, thumbnail_url
+                
+                # FALLBACK: If transcript is blocked, try to extract the video description/metadata
+                logger.info(f"YouTube transcript unavailable for {url}. Falling back to metadata extraction.")
+                metadata_content = None
+                # Try OpenGraph description
+                og_desc = soup.find('meta', property='og:description')
+                if og_desc and og_desc.get('content'):
+                    metadata_content = og_desc['content']
+                else:
+                    # Fallback to regular description tag
+                    desc_tag = soup.find('meta', attrs={'name':'description'})
+                    if desc_tag and desc_tag.get('content'):
+                        metadata_content = desc_tag['content']
+                if metadata_content:
+                    return metadata_content.strip(), thumbnail_url
+                else:
+                    logger.warning(f"No meaningful content found for {url}. Skipping.")
+                    return None, thumbnail_url
 
-            # Extract main article content
+            # Extract main article content for non-YouTube URLs
             content = self._extract_main_content(soup)
+            if content == "[Could not extract content]" or len(content) < 100:
+                return None, thumbnail_url
+                
             return content, thumbnail_url
 
         except Exception as e:
@@ -170,13 +195,14 @@ class ContentExtractor:
             return True
         return False
 
-    def _extract_youtube_transcript(self, url: str) -> str:
-        """Extract YouTube transcript if available."""
+    def _extract_youtube_transcript(self, url: str) -> Optional[str]:
+        """Extract YouTube transcript if available using cookies for authentication."""
         if not YOUTUBE_TRANSCRIPTS_AVAILABLE:
             return "[YouTube transcript extraction not available]"
 
         try:
-            # Extract video ID from URL
+            from youtube_transcript_api._api import YouTubeTranscriptApi
+            
             video_id = None
             if 'youtube.com/watch?v=' in url:
                 video_id = url.split('v=')[1].split('&')[0].split('#')[0]
@@ -187,54 +213,45 @@ class ContentExtractor:
             elif 'youtube.com/shorts/' in url:
                 video_id = url.split('youtube.com/shorts/')[1].split('?')[0].split('&')[0].split('#')[0]
 
-            # Validate video ID (YouTube IDs are 11 characters)
             if not video_id or len(video_id) != 11:
                 return f"[Invalid YouTube video ID format for URL: {url}]"
 
-            transcript_api = YouTubeTranscriptApi()
-            transcript = transcript_api.fetch(video_id)
-
-            # Combine transcript text
-            transcript_text = " ".join([entry.text for entry in transcript])
-            transcript_text = ' '.join(transcript_text.split())  # Clean up whitespace
+            cookies_path = os.path.join(self.base_dir, "cookies.txt")
+            cookies = cookies_path if os.path.exists(cookies_path) else None
+            
+            yt_client = YouTubeTranscriptApi()
+            transcript_list = yt_client.list(video_id)
+            
+            try:
+                transcript = transcript_list.find_transcript(['en'])
+            except:
+                transcript = transcript_list.find_transcript([])
+            
+            transcript_data = transcript.fetch()
+            transcript_text = " ".join([entry.text for entry in transcript_data])
+            transcript_text = ' '.join(transcript_text.split())
             return transcript_text if transcript_text else "[Empty transcript]"
 
         except Exception as e:
+            err_msg = str(e)
+            if "Premieres in" in err_msg:
+                logger.info(f"YouTube video {url} is a premiere. Skipping until live.")
+                return "[YOUTUBE_PREMIERE]"
             logger.warning(f"YouTube transcript extraction failed for {url}: {e}")
             return None
 
     def _extract_main_content(self, soup: BeautifulSoup) -> str:
-        """Extract main content from HTML soup.
-
-        The extractor works in two stages:
-        1. Find the most likely container that holds the article body (using a list of common selectors).
-        2. Clean out known noise elements (scripts, ads, comments, navigation, etc.).
-
-        After the generic extraction we apply **optional domain‑specific overrides**
-        defined in the configuration (``settings.json``) under the key
-        ``processing.domain_overrides``.  An override can specify:
-        * ``skip_prefix`` – number of initial paragraphs to drop (useful for
-          boilerplate intros or disclaimer blocks).
-        * ``root_selector`` – a CSS selector that narrows the extraction to a
-          specific subtree when the generic selectors pick up too much.
-        The configuration is completely optional; if a domain is not listed we
-        fall back to the generic behavior.
         """
-        # 1 generic selector sweep
-        # Generic content selector sweep – order matters, the first match wins.
-        # The list is intentionally broad but will be pruned by domain‑specific overrides
-        # when found in settings.json.  The goal is to avoid grabbing nav, ads, or publisher promos.
+        Extract main content from HTML soup.
+        
+        The extractor works in two stages:
+        1. Find the most likely container that holds the article body.
+        2. Clean out known noise elements (scripts, ads, comments, etc.).
+        """
         content_selectors = [
-            'article',            # Semantic article tag
-            '[role=article]',      # Accessible role
-            '[itemtype*="http://schema.org/Article"]',  # Schema.org marker
-            'main',               # Main content area
-            '.entry-content',
-            '#content',
-            '[class*=content]',   # Generic content containers
-            '[class*=article]',
-            '[class*=post]',
-            '.post',
+            'article', '[role=article]', '[itemtype*="http://schema.org/Article"]',
+            'main', '.entry-content', '#content', '[class*=content]',
+            '[class*=article]', '[class*=post]', '.post',
         ]
 
         content_elem = None
@@ -243,7 +260,6 @@ class ContentExtractor:
             if content_elem:
                 break
 
-        # 2 apply domain override if present
         domain = ''
         if hasattr(self, "current_url"):
             domain = urlparse(self.current_url).netloc
@@ -255,7 +271,6 @@ class ContentExtractor:
                 if custom_elem:
                     content_elem = custom_elem
 
-        # 3 cleanup and extract text
         if not content_elem:
             content_elem = soup.find('body')
         if content_elem:
@@ -263,7 +278,6 @@ class ContentExtractor:
                 unwanted.decompose()
 
             text = content_elem.get_text(separator=' ', strip=True)
-            # 4 apply skip_prefix if configured
             if domain in overrides and overrides[domain].get("skip_prefix"):
                 paragraphs = [p for p in text.split('\n\n') if p.strip()]
                 skip = overrides[domain]["skip_prefix"]
@@ -287,10 +301,15 @@ class ContentExtractor:
             List of dicts with keys: title, link, published, summary
         """
         try:
-            feed = feedparser.parse(url)
-            if feed.bozo:
+            # Fetch raw content to handle malformed encoding
+            response = requests.get(url, timeout=10, headers={"User-Agent": self.user_agent})
+            response.raise_for_status()
+            data = response.content.decode('utf-8', errors='replace')
+            # Remove any control characters except whitespace (potentially breaking XML)
+            cleaned = ''.join(ch if ch.isprintable() or ch in "\n\r\t" else '' for ch in data)
+            feed = feedparser.parse(cleaned)
+            if feed.bozo and hasattr(feed, 'bozo_exception'):
                 logger.warning(f"RSS feed {url} may be malformed: {feed.bozo_exception}")
-            
             entries = []
             for entry in feed.entries:
                 entries.append({

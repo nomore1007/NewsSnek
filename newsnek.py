@@ -105,6 +105,7 @@ class NewsSnekEngine:
             try:
                 chain = self._get_summarizer_for_group(group_name, group_data)
                 prompt = group_data.get("prompt") or self.config.get("prompts.article_summary", "Summarize this article briefly:")
+                silent_fail = group_data.get("silent_fail", False)
             except Exception as e:
                 logger.error(f"❌ Setup failed for {group_name}: {e}")
                 continue
@@ -113,7 +114,10 @@ class NewsSnekEngine:
             target_channels = group_data.get("channels", [])
 
             for url in urls:
-                feed_entries = self.extractor.parse_rss_feed(url)
+                # Only attempt RSS parsing if the URL looks like a feed
+                is_feed = any(ext in url.lower() for ext in ['/feed', '.xml', '.rss'])
+                feed_entries = self.extractor.parse_rss_feed(url) if is_feed else []
+                
                 if feed_entries:
                     for entry in feed_entries:
                         article_url = entry.get('link')
@@ -123,35 +127,43 @@ class NewsSnekEngine:
                         content, thumbnail = self.extractor.extract_from_url(article_url)
                         if not content or any(m in content for m in ["[Error", "[Could not extract content]"]): continue
                         
-                        title = entry.get('title', 'No Title')[:100]
+                        title = entry.get('title', 'No Title')[:250]
+
                         author = entry.get('author', '')
+                        
                         try:
-                            summary = chain.summarize(content, prompt)
-                            self.db.store_article(article_url, title, summary, group_name)
-                            if not (summary.startswith('[') and 'Error' in summary):
-                                for ch_name in target_channels:
-                                    ch = self._get_channel_instance(ch_name)
-                                    if ch:
-                                        src = self._get_publisher_name(article_url, author)
-                                        ch.send_summary(title, summary, src, "", article_url, thumbnail)
+                            summary = chain.summarize(content, prompt, silent_fail=silent_fail)
+                            if summary:
+                                self.db.store_article(article_url, title, summary, group_name)
+                                if not (summary.startswith('[') and 'Error' in summary):
+                                    for ch_name in target_channels:
+                                        ch = self._get_channel_instance(ch_name)
+                                        if ch:
+                                            src = self._get_publisher_name(article_url, author)
+                                            ch.send_summary(title, summary, src, "", article_url, thumbnail)
                         except Exception as e:
-                            logger.error(f"❌ Summary failed for {article_url}: {e}")
+                            if not silent_fail:
+                                logger.error(f"❌ Summary failed for {article_url}: {e}")
                 else:
                     if self.db.has_article(url): continue
                     logger.info(f"🔎 Extracting: {url}")
                     content, thumbnail = self.extractor.extract_from_url(url)
                     if not content or any(m in content for m in ["[Error", "[Could not extract content]"]): continue
-                    title = content.split('\n')[0][:100] if content else "Untitled"
+                    title = content.split('\n')[0][:250] if content else "Untitled"
+                    
                     try:
-                        summary = chain.summarize(content, prompt)
-                        self.db.store_article(url, title, summary, group_name)
-                        if not (summary.startswith('[') and 'Error' in summary):
-                            for ch_name in target_channels:
-                                ch = self._get_channel_instance(ch_name)
-                                if ch:
-                                    ch.send_summary(title, summary, self._get_publisher_name(url), "", url, thumbnail)
+                        summary = chain.summarize(content, prompt, silent_fail=silent_fail)
+                        if summary:
+                            self.db.store_article(url, title, summary, group_name)
+                            if not (summary.startswith('[') and 'Error' in summary):
+                                for ch_name in target_channels:
+                                    ch = self._get_channel_instance(ch_name)
+                                    if ch:
+                                        src = self._get_publisher_name(url, '')
+                                        ch.send_summary(title, summary, src, "", url, thumbnail)
                     except Exception as e:
-                        logger.error(f"❌ Summary failed for {url}: {e}")
+                        if not silent_fail:
+                            logger.error(f"❌ Summary failed for {url}: {e}")
 
     def generate_daily_overview(self):
         """Generate and dispatch a daily overview if the configured time matches."""
@@ -181,7 +193,7 @@ class NewsSnekEngine:
             model_name = self.config.settings.get("summarizer", {}).get("overview_model", "openrouter-auto")
             provider = self.registry.get(model_name) or ProviderChain("overview-fallback", self.registry.list_providers(), self.registry)
             overview_text = provider.summarize(context, prompt)
-
+            
             for ch_name in target_channels:
                 ch = self._get_channel_instance(ch_name)
                 if ch:

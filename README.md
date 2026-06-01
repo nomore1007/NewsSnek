@@ -1,93 +1,173 @@
-# NewsSnek
+# News Snek – Newspaper‑Style RSS & YouTube Summariser  
+*A lightweight, Python‑based RSS/YouTube reader that pulls summaries and distributes them via Discord/Telegram (or stdout) using OpenAI‑style LLMs.*
 
-A lightweight, Docker-ready news aggregator and summarizer. It pulls RSS feeds and YouTube content, uses AI (Ollama or OpenRouter) to summarize them, and delivers the results to your preferred channels (Discord, Telegram, or Console).
+---
 
-## 🚀 Quick Start (Docker)
+## Table of Contents  
+1. [What it does](#what-it-does)  
+2. [Requirements](#requirements)  
+3. [Installation](#installation)  
+4. [Configuration](#configuration)  
+5. [Running the app](#running-the-app)  
+6. [Channels](#channels)  
+7. [Development](#development)  
+8. [Troubleshooting](#troubleshooting)
 
-The easiest way to get running is using Docker.
+---
 
-### 1. Prepare your data directory
-The application persists all settings, sources, and the SQLite database in a single directory on your host.
+## What it does
+
+- **Pulls** RSS feeds, regular web pages, and YouTube videos.  
+- **Summarises** article text using an LLM chain (OpenRouter, Ollama, etc.).  
+- **Aggregates** daily “world‑state” overviews from all processed summaries.  
+- **Distributes** summaries to Discord, Telegram, or a local file/console.  
+- **Bypasses Blocks**: Supports `cookies.txt` injection for YouTube transcript extraction to avoid "Cloud IP" blocks.
+
+---
+
+## Requirements
+
+| Item | Version | Why |
+| --- | --- | --- |
+| Docker | **≥ 2.0** | Containerised runtime – no host‑side Python setup needed. |
+| One LLM provider | Any supported provider | Provides the summarisation engine (e.g., OpenRouter, Ollama). |
+| (Optional) Bot tokens | Telegram/Discord | Required for automated messaging delivery. |
+
+---
+
+## Installation
+
+### Docker Compose (Recommended)
+
+The repo ships with a `docker-compose.yml` that performs a clean build, mounts a persistent volume for your database/settings, and runs in the background.
+
 ```bash
-sudo mkdir -p /opt/newsnek
-sudo chown -R $USER:$USER /opt/newsnek
+git clone https://github.com/your-org/newsnek.git
+cd newsnek
+
+# Build and start the container
+docker compose up -d
 ```
 
-### 2. Run with Docker
-Build and run the container in one command:
+### Plain Docker
+
+If you prefer not to use Compose, you can run the image directly:
+
 ```bash
-docker build -t news-snek .
+docker build -t newsnek:latest .
 docker run -d \
-  --name news-snek \
-  -v /opt/newsnek:/app/data \
-  news-snek
+    --name newsnek \
+    -v /opt/newsnek:/app/data \
+    newsnek:latest
 ```
 
-### 3. Configure
-The first run will create default templates in `/opt/newsnek`. Edit these to set up your feeds and AI providers:
-* `/opt/newsnek/settings.json` — AI credentials and output channels.
-* `/opt/newsnek/sources.json` — Your news feeds and groups.
+*Note: The volume `/opt/newsnek` (or your chosen path) is critical. It stores your `settings.json`, `sources.json`, SQLite database, and your `cookies.txt` for YouTube.*
 
 ---
 
-## 🛠 Project Structure
+## Configuration
 
-**New Features (since v2.0)**
-- **Robust YouTube transcript handling** – If a transcript cannot be fetched, the system now falls back to the video’s description/metadata and logs a warning instead of failing.
-- **Cookie‑based authentication** – Place a `cookies.txt` (Netscape format) in the project root to let the extractor perform authenticated transcript requests, bypassing YouTube’s bot‑checks.
-- **Automated email summaries** – Cron jobs can now pull and summarize the `News` folder at 7:45 AM weekdays and the `Inbox` folder hourly (8 AM‑4 PM) on workdays, delivering concise digests to Telegram.
+All behavior is controlled via **`settings.json`**, which resides in your data volume. 
+
+### Key Sections
+
+1. **`providers`**: Defines the AI models available to the engine (e.g., OpenRouter, Ollama).
+2. **`prompts`**: Customises the "personality" of your summaries.
+3. **`output.channels`**: Defines the destinations (Telegram, Discord, Console).
+4. **`overview`**: Controls the daily consolidated digest (time, target channels, and item count).
+
+### Example `settings.json`
+
+```json
+{
+  "providers": {
+    "openrouter-free": { "type": "openrouter", "model": "openrouter/free" },
+    "local-ollama": { "type": "ollama", "host": "http://10.0.10.44:11434", "model": "qwen3.5:4b" }
+  },
+
+  "prompts": {
+    "article_summary": "Summarise this article in a neutral, concise tone:",
+    "overview_summary": "Provide a comprehensive daily overview of the following news summaries."
+  },
+
+  "output": {
+    "channels": {
+      "DailyNews": {
+        "type": "telegram",
+        "config": {
+          "bot_token": "123456:ABC-DEF",
+          "chat_id": "@your_channel"
+        }
+      },
+      "TechAlerts": {
+        "type": "discord",
+        "config": {
+          "bot_token": "DISCORD_TOKEN",
+          "channel_id": "9876543210"
+        }
+      }
+    }
+  },
+
+  "overview": {
+    "time": "07:30",
+    "channels": [ "DailyNews", "TechAlerts" ],
+    "max_items": 50
+  },
+
+  "interval": 30,
+  "summarizer": {
+    "providers": [ "openrouter-free" ],
+    "overview_model": "openrouter-free",
+    "preferred_language": "en"
+  }
+}
+```
 
 ---
 
-## 🛠 Project Structure
+## Running the App
 
-```
-.
-├── Dockerfile
-├── README.md
-├── requirements.txt
-├── run-newsnek.sh       # Container entrypoint wrapper
-├── src/                 # Main application logic
-│   ├── app.py           # Entry point
-│   ├── config.py        # Configuration management
-│   ├── database.py      # SQLite integration
-│   ├── extractor.py     # Content scraping
-│   ├── output_channels.py
-│   └── summarizers.py
-└── .gitignore           # Protects credentials and local data
-```
+The engine is designed to run continuously in the background, but you can also trigger specific actions using `docker exec`.
 
-## ⚙️ Configuration Details
+| Mode | Command | Description |
+|------|---------|-------------|
+| **One‑off Run** | `docker exec newsnek-new python3 newsnek.py --once` | Processes all feeds once and generates an overview if the time matches. |
+| **Trigger Overview** | `docker exec newsnek-new python3 newsnek.py --overview` | Forces an immediate daily overview generation. |
+| **Debug Mode** | Add `--debug` to any command | Enables verbose logging to see exactly where an extraction is failing. |
 
-### AI Providers
-Supported providers include:
-* **OpenRouter**: Requires an `api_key` in `settings.json`.
-* **Ollama**: Requires an `api_url` (e.g., `http://host.docker.internal:11434`).
+*If you are running it locally (no Docker), simply use `python3 newsnek.py --once`.*
 
-### Data Persistence
-All runtime data is stored in `/app/data` inside the container, which maps to `/opt/newsnek` on your host:
-* `news_reader.db` — SQLite database.
-* `settings.json` — Runtime configuration.
-* `sources.json` — Feed definitions.
+---
 
-## 🧪 Local Development
+## Channels
 
-If you want to run the application directly on your host (without Docker):
+You can define multiple output channels in `settings.json`. Each group of sources can be routed to different channels.
 
-1. **Install dependencies**:
-   ```bash
-   pip install -r requirements.txt
-   ```
-2. **Run the application**:
-   ```bash
-   python3 newsnek.py --debug
-   ```
-   *Note: Ensure your `settings.json` and `sources.json` are in the current directory or specify paths via command line arguments.*
+| Type | Config Fields | Best Use Case |
+|------|---------------|-------------|
+| `telegram` | `bot_token`, `chat_id` | Fast, mobile‑first alerts to a bot or public channel. |
+| `discord` | `bot_token` **or** `webhook_url`, `channel_id` | Rich embeds for community or team feeds. |
+| `console` | `output_file` (optional) | Writing to a local `.txt` file—perfect for debugging and local testing. |
 
-## 🛡 Security & Best Practices
-* **Never commit `settings.json` or `sources.json`** to version control. They contain API keys and personal channel IDs.
-* Use the provided `settings.example.json` and `sources.example.json` as templates.
-* Always use the `.gitignore` provided to prevent accidental exposure of sensitive data.
+**Pro Tip**: To stop a channel from receiving the daily overview, simply remove its name from the `overview.channels` array in `settings.json`.
 
-## 📜 License
-MIT
+---
+
+## Troubleshooting
+
+| Symptom | Likely Cause | Fix |
+|---------|--------------|-----|
+| **`Provider not found`** | Typo in `settings.json` | Ensure the provider name in `summarizer.providers` matches a key in the `providers` block. |
+| **YouTube "Empty Transcript"** | IP Block / No Captions | Drop a `cookies.txt` file into the data volume to authenticate as a real user. |
+| **`ModuleNotFoundError`** | Broken package path | Ensure the `src` folder is at the same level as `newsnek.py` inside the container. |
+| **JSON Parsing Error** | Syntax mistake | Check for trailing commas or missing quotes in `settings.json` or `sources.json`. |
+
+---
+
+## Development
+
+If you want to contribute or modify the logic:
+1. **Environment**: `pip install -r requirements.txt`
+2. **Test**: Run `pytest tests/` to ensure no regressions.
+3. **Build**: Use `docker build -t newsnek .` to create a new image.

@@ -18,8 +18,12 @@ class NewsReaderConfig:
     """
 
     def __init__(self, base_dir: str = ".", settings_file: str = "settings.json", sources_file: str = "sources.json"):
-        # Use absolute path for base_dir to avoid CWD issues
-        self.base_dir = os.path.abspath(base_dir)
+        # Use /app/data as the primary base directory for containerized deployments
+        if os.path.exists("/app/data"):
+            self.base_dir = "/app/data"
+        else:
+            self.base_dir = os.path.abspath(base_dir)
+            
         self.settings_file = settings_file
         self.sources_file = sources_file
         
