@@ -6,18 +6,18 @@ Handles RSS parsing, web scraping, YouTube transcripts, and Internet Archive fal
 import logging
 import requests
 import os
+import re
 from urllib.parse import urljoin, quote, urlparse
-from typing import Tuple, Optional, List, Dict
+from typing import Tuple, Optional, List, Dict, Any
 import feedparser
 from bs4 import BeautifulSoup
 
 # YouTube Transcript handling (optional dependency)
 try:
-    import youtube_transcript_api as YTA_MODULE
+    from youtube_transcript_api import YouTubeTranscriptApi, TranscriptsDisabled, NoTranscriptFound
     YOUTUBE_TRANSCRIPTS_AVAILABLE = True
 except ImportError:
     YOUTUBE_TRANSCRIPTS_AVAILABLE = False
-    YTA_MODULE = None
 
 logger = logging.getLogger(__name__)
 
@@ -28,35 +28,32 @@ class ContentExtractor:
     def __init__(self, config):
         """
         Initialize content extractor.
-        
-        Args:
-            config: NewsReaderConfig instance (provides settings like timeout, user_agent)
         """
         self.config = config
         self.base_dir = config.base_dir
-        # Get default timeout and user agent from config
         self.default_timeout = config.get("processing.scrape_timeout", 30)
         self.user_agent = config.get("processing.user_agent", 
                                     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+        
+        self.yt_client = None
+        if YOUTUBE_TRANSCRIPTS_AVAILABLE:
+            proxy_url = config.get("processing.youtube_proxy")
+            if proxy_url:
+                # Import here to avoid issues if it's not available
+                from youtube_transcript_api import ProxyConfig
+                self.yt_client = YouTubeTranscriptApi(proxy_config=ProxyConfig(proxy_url))
+            else:
+                self.yt_client = YouTubeTranscriptApi()
 
 
     def extract_from_url(self, url: str, timeout: Optional[int] = None) -> Tuple[Optional[str], Optional[str]]:
         """
         Extract content and thumbnail from a URL.
-        
-        Args:
-            url: URL to extract content from
-            timeout: Request timeout (defaults to config value)
-            
-        Returns:
-            Tuple of (content_text, thumbnail_url)
         """
-        # store URL for domain-override logic in _extract_main_content
         self.current_url = url
         if timeout is None:
             timeout = self.default_timeout
 
-        # Pre-emptively check for YouTube thumbnail
         thumbnail_url = None
         if self._is_youtube_video_url(url):
             thumbnail_url = self._get_youtube_thumbnail(url)
@@ -69,38 +66,19 @@ class ContentExtractor:
             soup = BeautifulSoup(response.content.decode('utf-8', errors='ignore'), 'html.parser')
             base_url = f"{urlparse(url).scheme}://{urlparse(url).netloc}"
             
-            # Only try to extract HTML thumbnail if we don't have a YouTube one
             if not thumbnail_url:
                 thumbnail_url = self._extract_thumbnail_url(soup, base_url)
 
-            # Check for YouTube content
             if self._is_youtube_video_url(url):
                 transcript = self._extract_youtube_transcript(url)
                 if transcript == "[YOUTUBE_PREMIERE]":
-                    logger.info(f"Skipping YouTube premiere: {url}")
                     return None, thumbnail_url
                 if transcript:
                     return transcript, thumbnail_url
                 
-                # FALLBACK: If transcript is blocked, try to extract the video description/metadata
-                logger.info(f"YouTube transcript unavailable for {url}. Falling back to metadata extraction.")
-                metadata_content = None
-                # Try OpenGraph description
-                og_desc = soup.find('meta', property='og:description')
-                if og_desc and og_desc.get('content'):
-                    metadata_content = og_desc['content']
-                else:
-                    # Fallback to regular description tag
-                    desc_tag = soup.find('meta', attrs={'name':'description'})
-                    if desc_tag and desc_tag.get('content'):
-                        metadata_content = desc_tag['content']
-                if metadata_content:
-                    return metadata_content.strip(), thumbnail_url
-                else:
-                    logger.warning(f"No meaningful content found for {url}. Skipping.")
-                    return None, thumbnail_url
+                logger.info(f"YouTube transcript unavailable or blocked for {url}. Falling back to metadata.")
+                return self._extract_metadata_from_soup(soup, base_url, thumbnail_url)
 
-            # Extract main article content for non-YouTube URLs
             content = self._extract_main_content(soup)
             if content == "[Could not extract content]" or len(content) < 100:
                 return None, thumbnail_url
@@ -111,14 +89,12 @@ class ContentExtractor:
             logger.warning(f"Failed to extract content from {url}: {e}. Trying Internet Archive.")
             archive_url = self.get_internet_archive_url(url)
             if archive_url:
-                logger.info(f"Found Internet Archive snapshot: {archive_url}")
                 try:
                     response = requests.get(archive_url, headers=headers, timeout=timeout)
                     response.raise_for_status()
                     soup = BeautifulSoup(response.content.decode('utf-8', errors='ignore'), 'html.parser')
                     base_url = f"{urlparse(url).scheme}://{urlparse(url).netloc}"
                     
-                    # Again, check for YouTube thumbnail if fallback is also a YT link
                     if not thumbnail_url and self._is_youtube_video_url(archive_url):
                         thumbnail_url = self._get_youtube_thumbnail(archive_url)
                     elif not thumbnail_url:
@@ -147,6 +123,23 @@ class ContentExtractor:
             return None
 
 
+    def _extract_metadata_from_soup(self, soup: BeautifulSoup, base_url: str, thumbnail_url: Optional[str]) -> Tuple[Optional[str], Optional[str]]:
+        """Fallback to metadata extraction from meta tags when transcript/scraper fails."""
+        content = None
+        og_desc = soup.find('meta', property='og:description')
+        if og_desc and og_desc.get('content'):
+            content = og_desc['content']
+        else:
+            desc_tag = soup.find('meta', attrs={'name':'description'})
+            if desc_tag and desc_tag.get('content'):
+                content = desc_tag['content']
+        
+        if not content:
+            content = self._extract_main_content(soup)
+            
+        return content, thumbnail_url
+
+
     def _get_youtube_thumbnail(self, url: str) -> Optional[str]:
         """Get high-res thumbnail for a YouTube video."""
         video_id = None
@@ -165,7 +158,6 @@ class ContentExtractor:
 
     def _extract_thumbnail_url(self, soup: BeautifulSoup, base_url: str) -> Optional[str]:
         """Extract thumbnail URL from HTML soup."""
-        # Try OpenGraph and Twitter card images first
         og_image = soup.find('meta', property='og:image')
         if og_image and og_image.get('content'):
             return urljoin(base_url, og_image['content'])
@@ -174,7 +166,6 @@ class ContentExtractor:
         if twitter_image and twitter_image.get('content'):
             return urljoin(base_url, twitter_image['content'])
 
-        # Find a prominent image in the article body
         article_body = soup.find('article') or soup.find('main')
         if article_body:
             first_img = article_body.find('img')
@@ -184,7 +175,7 @@ class ContentExtractor:
         return None
 
     def _is_youtube_video_url(self, url: str) -> bool:
-        """Check if URL is a YouTube video URL (not channel, playlist, etc.)."""
+        """Check if URL is a YouTube video URL."""
         if 'youtu.be/' in url:
             return True
         if 'youtube.com/watch?v=' in url:
@@ -196,58 +187,55 @@ class ContentExtractor:
         return False
 
     def _extract_youtube_transcript(self, url: str) -> Optional[str]:
-        """Extract YouTube transcript if available using cookies for authentication."""
-        if not YOUTUBE_TRANSCRIPTS_AVAILABLE:
-            return "[YouTube transcript extraction not available]"
+        """Extract YouTube transcript with robust error handling and fallback."""
+        if not YOUTUBE_TRANSCRIPTS_AVAILABLE or self.yt_client is None:
+            return None
+
+        video_id = None
+        if 'youtube.com/watch?v=' in url:
+            video_id = url.split('v=')[1].split('&')[0].split('#')[0]
+        elif 'youtu.be/' in url:
+            video_id = url.split('youtu.be/')[1].split('?')[0].split('&')[0].split('#')[0]
+        elif 'youtube.com/embed/' in url:
+            video_id = url.split('youtube.com/embed/')[1].split('?')[0].split('&')[0].split('#')[0]
+        elif 'youtube.com/shorts/' in url:
+            video_id = url.split('youtube.com/shorts/')[1].split('?')[0].split('&')[0].split('#')[0]
+
+        if not video_id or len(video_id) != 11:
+            return None
 
         try:
-            from youtube_transcript_api._api import YouTubeTranscriptApi
-            
-            video_id = None
-            if 'youtube.com/watch?v=' in url:
-                video_id = url.split('v=')[1].split('&')[0].split('#')[0]
-            elif 'youtu.be/' in url:
-                video_id = url.split('youtu.be/')[1].split('?')[0].split('&')[0].split('#')[0]
-            elif 'youtube.com/embed/' in url:
-                video_id = url.split('youtube.com/embed/')[1].split('?')[0].split('&')[0].split('#')[0]
-            elif 'youtube.com/shorts/' in url:
-                video_id = url.split('youtube.com/shorts/')[1].split('?')[0].split('&')[0].split('#')[0]
-
-            if not video_id or len(video_id) != 11:
-                return f"[Invalid YouTube video ID format for URL: {url}]"
-
-            cookies_path = os.path.join(self.base_dir, "cookies.txt")
-            cookies = cookies_path if os.path.exists(cookies_path) else None
-            
-            yt_client = YouTubeTranscriptApi()
-            transcript_list = yt_client.list(video_id)
-            
+            transcript_list = self.yt_client.list(video_id)
             try:
                 transcript = transcript_list.find_transcript(['en'])
-            except:
+            except (NoTranscriptFound, Exception):
                 transcript = transcript_list.find_transcript([])
             
             transcript_data = transcript.fetch()
-            transcript_text = " ".join([entry.text for entry in transcript_data])
-            transcript_text = ' '.join(transcript_text.split())
-            return transcript_text if transcript_text else "[Empty transcript]"
+            # Collect text parts safely
+            text_parts = []
+            for segment in transcript_data:
+                try:
+                    text_parts.append(segment.text)
+                except AttributeError:
+                    text_parts.append(str(segment))
+            
+            transcript_text = " ".join(text_parts)
+            return " ".join(transcript_text.split())
 
+        except (TranscriptsDisabled, NoTranscriptFound):
+            logger.info(f"YouTube: No transcripts available for {video_id}")
+            return None
         except Exception as e:
-            err_msg = str(e)
-            if "Premieres in" in err_msg:
-                logger.info(f"YouTube video {url} is a premiere. Skipping until live.")
-                return "[YOUTUBE_PREMIERE]"
-            logger.warning(f"YouTube transcript extraction failed for {url}: {e}")
+            err_msg = str(e).lower()
+            if "429" in err_msg or "403" in err_msg or "blocked" in err_msg:
+                logger.error(f"CRITICAL: YouTube IP Block detected for {video_id}. Error: {e}")
+            else:
+                logger.warning(f"YouTube transcript error for {video_id}: {e}")
             return None
 
     def _extract_main_content(self, soup: BeautifulSoup) -> str:
-        """
-        Extract main content from HTML soup.
-        
-        The extractor works in two stages:
-        1. Find the most likely container that holds the article body.
-        2. Clean out known noise elements (scripts, ads, comments, etc.).
-        """
+        """Extract main article content from HTML soup."""
         content_selectors = [
             'article', '[role=article]', '[itemtype*="http://schema.org/Article"]',
             'main', '.entry-content', '#content', '[class*=content]',
@@ -291,25 +279,13 @@ class ContentExtractor:
         return "[Could not extract content]"
 
     def parse_rss_feed(self, url: str) -> List[Dict]:
-        """
-        Parse an RSS feed and return a list of entries.
-        
-        Args:
-            url: RSS feed URL
-            
-        Returns:
-            List of dicts with keys: title, link, published, summary
-        """
+        """Parse an RSS feed and return a list of entries."""
         try:
-            # Fetch raw content to handle malformed encoding
             response = requests.get(url, timeout=10, headers={"User-Agent": self.user_agent})
             response.raise_for_status()
             data = response.content.decode('utf-8', errors='replace')
-            # Remove any control characters except whitespace (potentially breaking XML)
             cleaned = ''.join(ch if ch.isprintable() or ch in "\n\r\t" else '' for ch in data)
             feed = feedparser.parse(cleaned)
-            if feed.bozo and hasattr(feed, 'bozo_exception'):
-                logger.warning(f"RSS feed {url} may be malformed: {feed.bozo_exception}")
             entries = []
             for entry in feed.entries:
                 entries.append({

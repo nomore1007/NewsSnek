@@ -39,4 +39,4 @@ RUN useradd --create-home --shell /bin/bash app && \
 ENTRYPOINT ["/app/docker-entrypoint.sh"]
 
 # Default command - can be overridden by Portainer
-CMD ["python3", "newsnek.py", "--workdir", "/app/data", "--overview", "--interval", "60"]
+CMD ["python3", "nwsreader.py"]

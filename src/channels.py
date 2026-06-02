@@ -142,63 +142,116 @@ class ConsoleOutputChannel(OutputChannel):
 
 
 class TelegramOutputChannel(OutputChannel):
-    """Sends messages via the Telegram Bot API."""
+    """Sends messages via the Telegram Bot API with robust image handling."""
 
     def __init__(self, config: OutputChannelConfig):
         super().__init__(config)
         self.bot_token: Optional[str] = config.options.get('bot_token')
         self.chat_id: Optional[str] = config.options.get('chat_id')
-        self.api_url: Optional[str] = f"https://api.telegram.org/bot{self.bot_token}" if self.bot_token else None
+        self.api_url: Optional[str] = (
+            f"https://api.telegram.org/bot{self.bot_token}" if self.bot_token else None
+        )
 
     def is_available(self) -> bool:
         return bool(self.bot_token and self.chat_id)
 
     def _post(self, method: str, payload: Dict) -> Dict:
-        url = f"{self.api_url}/{method}" if self.api_url else None
-        response = requests.post(url, json=payload, timeout=30)
-        response.raise_for_status()
-        return response.json()
+        if not self.api_url:
+            raise RuntimeError("Telegram API URL is not configured")
+        url = f"{self.api_url}/{method}"
+        resp = requests.post(url, json=payload, timeout=30)
+        resp.raise_for_status()
+        return resp.json()
 
-    def send_summary(self, title: str, summary: str, source: str = "", category: str = "", article_url: str = "", thumbnail_url: Optional[str] = None) -> OutputChannelResult:
+    def _is_image_url_valid(self, url: str) -> bool:
+        """
+        Very small sanity check: make sure the URL points to something that
+        looks like an image and is reachable with a HEAD request.
+        """
+        if not url:
+            return False
+        # Basic pattern check – must end with a common image extension
+        if not re.search(r"\.(png|jpe?g|gif|bmp|webp)(\?.*)?$", url, re.IGNORECASE):
+            logger.warning(f"Telegram: thumbnail URL does not look like an image: {url}")
+            return False
+        try:
+            head = requests.head(url, timeout=5, allow_redirects=True)
+            # Telegram only accepts images up to ~10 MB; we just check the MIME type
+            ct = head.headers.get("Content-Type", "")
+            if not ct.startswith("image/"):
+                logger.warning(f"Telegram: thumbnail URL is not an image (Content-Type={ct}): {url}")
+                return False
+            return True
+        except Exception as exc:
+            logger.warning(f"Telegram: could not verify thumbnail URL {url}: {exc}")
+            return False
+
+    def send_summary(
+        self,
+        title: str,
+        summary: str,
+        source: str = "",
+        category: str = "",
+        article_url: str = "",
+        thumbnail_url: Optional[str] = None,
+    ) -> OutputChannelResult:
         title = _strip_think(title)
         summary = _strip_think(summary)
+
         if not self.is_available():
             return OutputChannelResult(False, error="Telegram not configured")
+
+        # Build the common message body (Markdown)
+        message = f"📄 *{title}*\n"
+        if source:
+            message += f"Channel: _{source}_\n"
+        if category:
+            message += f"Category: _{category}_\n"
+        if article_url:
+            message += f"[Original Article]({article_url})\n"
+        message += f"\n{summary}"
+
+        # Try to send a photo if we have a *valid* thumbnail URL
+        if thumbnail_url and self._is_image_url_valid(thumbnail_url):
+            payload = {
+                "chat_id": self.chat_id,
+                "photo": thumbnail_url,
+                "caption": message,
+                "parse_mode": "Markdown",
+            }
+            try:
+                result = self._post("sendPhoto", payload)
+                if result.get("ok"):
+                    logger.info(
+                        f"✅ Telegram: Summary with photo sent (msg_id={result['result']['message_id']})"
+                    )
+                    return OutputChannelResult(True, f"Message ID {result['result']['message_id']}")
+                else:
+                    logger.warning(
+                        f"Telegram sendPhoto returned error: {result}. Falling back to text."
+                    )
+            except Exception as e:
+                logger.warning(f"Telegram sendPhoto failed ({e}). Falling back to text.")
+
+        # Fallback – plain text message (no photo)
         try:
-            message = f"📄 *{title}*\n"
-            if source:
-                message += f"Channel: _{source}_\n"
-            if category:
-                message += f"Category: _{category}_\n"
-            if article_url:
-                message += f"[Original Article]({article_url})\n"
-            message += f"\n{summary}"
-
-            if thumbnail_url:
-                payload = {
-                    'chat_id': self.chat_id,
-                    'photo': thumbnail_url,
-                    'caption': message,
-                    'parse_mode': 'Markdown'
-                }
-                result = self._post('sendPhoto', payload)
+            payload = {
+                "chat_id": self.chat_id,
+                "text": message,
+                "parse_mode": "Markdown",
+                "disable_web_page_preview": False,
+            }
+            result = self._post("sendMessage", payload)
+            if result.get("ok"):
+                logger.info(
+                    f"✅ Telegram: Summary (text‑only) sent (msg_id={result['result']['message_id']})"
+                )
+                return OutputChannelResult(True, f"Message ID {result['result']['message_id']}")
             else:
-                payload = {
-                    'chat_id': self.chat_id,
-                    'text': message,
-                    'parse_mode': 'Markdown'
-                }
-                result = self._post('sendMessage', payload)
-
-            if result.get('ok'):
-                msg_id = result['result']['message_id']
-                logger.info(f"✅ Telegram: Summary sent (msg_id={msg_id})")
-                return OutputChannelResult(True, f"Message ID {msg_id}")
-            else:
-                logger.error(f"❌ Telegram API error: {result}")
+                logger.error(f"❌ Telegram sendMessage error: {result}")
                 return OutputChannelResult(False, error=str(result))
         except Exception as e:
-            logger.error(f"❌ Telegram send failed: {e}")
+            logger.error(f"❌ Telegram sendMessage failed: {e}")
             return OutputChannelResult(False, error=str(e))
 
     def send_overview(self, overview: str, date: str = "") -> OutputChannelResult:
@@ -209,19 +262,27 @@ class TelegramOutputChannel(OutputChannel):
             if date:
                 title += f" - {date}"
             message = f"*{title}*\n\n{overview}"
-            # Telegram message limit is 4096 characters
+            # Telegram's max message length is 4096 characters
             if len(message) > 4000:
                 # Split into chunks to stay under limit
                 chunks = self._split_message(message, 4000)
                 for i, chunk in enumerate(chunks):
-                    payload = {'chat_id': self.chat_id, 'text': chunk, 'parse_mode': 'Markdown' if i == 0 else None}
-                    self._post('sendMessage', payload)
+                    payload = {
+                        "chat_id": self.chat_id,
+                        "text": chunk,
+                        "parse_mode": "Markdown" if i == 0 else None,
+                    }
+                    self._post("sendMessage", payload)
                 logger.info(f"✅ Telegram: Overview sent in {len(chunks)} chunks")
                 return OutputChannelResult(True, f"Sent in {len(chunks)} messages")
             else:
-                payload = {'chat_id': self.chat_id, 'text': message, 'parse_mode': 'Markdown'}
-                result = self._post('sendMessage', payload)
-                if result.get('ok'):
+                payload = {
+                    "chat_id": self.chat_id,
+                    "text": message,
+                    "parse_mode": "Markdown",
+                }
+                result = self._post("sendMessage", payload)
+                if result.get("ok"):
                     msg_id = result['result']['message_id']
                     logger.info(f"✅ Telegram: Overview sent (msg_id={msg_id})")
                     return OutputChannelResult(True, f"Message ID {msg_id}")
@@ -235,7 +296,7 @@ class TelegramOutputChannel(OutputChannel):
     def _split_message(self, text: str, max_len: int) -> List[str]:
         chunks = []
         while len(text) > max_len:
-            split_point = text.rfind(' ', 0, max_len)
+            split_point = text.rfind(" ", 0, max_len)
             if split_point == -1:
                 split_point = max_len
             chunks.append(text[:split_point])
@@ -273,7 +334,15 @@ class DiscordOutputChannel(OutputChannel):
             return bool(self.bot_token and self.channel_id)
         return False
 
-    def send_summary(self, title: str, summary: str, source: str = "", category: str = "", article_url: str = "", thumbnail_url: Optional[str] = None) -> OutputChannelResult:
+    def send_summary(
+        self,
+        title: str,
+        summary: str,
+        source: str = "",
+        category: str = "",
+        article_url: str = "",
+        thumbnail_url: Optional[str] = None,
+    ) -> OutputChannelResult:
         title = _strip_think(title)
         summary = _strip_think(summary)
         if not self.is_available():
@@ -284,7 +353,7 @@ class DiscordOutputChannel(OutputChannel):
                 "description": summary,
                 "url": article_url or None,
                 "color": 0x3498db,
-                "footer": {"text": f"Channel: {source}" if source else "News Reader"}
+                "footer": {"text": f"Channel: {source}" if source else "News Reader"},
             }
             if thumbnail_url:
                 embed["thumbnail"] = {"url": thumbnail_url}
