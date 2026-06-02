@@ -48,7 +48,7 @@ class NewsSnekEngine:
         
         self.config = NewsReaderConfig(base_dir=self.base_dir)
         self.extractor = ContentExtractor(self.config)
-        self.db = DataManager(os.path.join(self.base_dir, self.config.get("files.database", "news_reader.db")))
+        self.db = DataManager(os.path.join(self.base_dir, "data", self.config.get("files.database", "news_reader.db")))
         self.registry = self.config.registry
 
     def _get_publisher_name(self, url: str, author: str = "") -> str:
