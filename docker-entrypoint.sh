@@ -89,4 +89,4 @@ fi
 echo "Configuration ready - NewsSnek is starting..."
 
 # Execute the newsnek application with updated arguments
-exec python3 /app/nwsreader.py
+exec python3 /app/newsnek.py
