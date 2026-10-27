@@ -39,11 +39,11 @@
 
 ### Docker Compose (Recommended)
 
-The repo ships with a `docker-compose.yml` that performs a clean build, mounts a persistent volume for your database/settings, and runs in the background.
+The repo ships with a `docker-compose.yml` that builds the image, mounts persistent configuration/database storage at `/opt/newsnek`, and runs in the background. In Portainer, deploy the repository as a Git stack and keep `/opt/newsnek` mounted to `/app/data` so updates do not overwrite your settings, source groups, or database.
 
 ```bash
-git clone https://github.com/your-org/newsnek.git
-cd newsnek
+git clone https://github.com/nomore1007/NewsSnek.git
+cd NewsSnek
 
 # Build and start the container
 docker compose up -d
@@ -71,7 +71,7 @@ All behavior is controlled via **`settings.json`**, which resides in your data v
 
 ### Key Sections
 
-1. **`providers`**: Defines the AI models available to the engine (e.g., OpenRouter, Ollama).
+1. **`providers`**: Defines the AI models available to the engine (e.g., OpenRouter, Ollama). Each source group in `sources.json` can define its own ordered `providers` fallback chain. This group-level list takes precedence over `summarizer.providers`.
 2. **`prompts`**: Customises the "personality" of your summaries.
 3. **`output.channels`**: Defines the destinations (Telegram, Discord, Console).
 4. **`overview`**: Controls the daily consolidated digest (time, target channels, and item count).
@@ -128,12 +128,12 @@ All behavior is controlled via **`settings.json`**, which resides in your data v
 
 ## Running the App
 
-The engine is designed to run continuously in the background, but you can also trigger specific actions using `docker exec`.
+The engine is designed to run continuously in the background, but you can also trigger specific actions using `docker exec`. Use the actual container name from your deployment (`news-snek` in the included Compose file).
 
 | Mode | Command | Description |
 |------|---------|-------------|
-| **One‑off Run** | `docker exec newsnek-new python3 newsnek.py --once` | Processes all feeds once and generates an overview if the time matches. |
-| **Trigger Overview** | `docker exec newsnek-new python3 newsnek.py --overview` | Forces an immediate daily overview generation. |
+| **One‑off Run** | `docker exec news-snek python3 newsnek.py --once` | Processes all feeds once and generates an overview if the time matches. |
+| **Trigger Overview** | `docker exec news-snek python3 newsnek.py --overview` | Forces an immediate daily overview generation. |
 | **Debug Mode** | Add `--debug` to any command | Enables verbose logging to see exactly where an extraction is failing. |
 
 *If you are running it locally (no Docker), simply use `python3 newsnek.py --once`.*

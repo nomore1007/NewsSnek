@@ -159,9 +159,20 @@ class TelegramOutputChannel(OutputChannel):
         if not self.api_url:
             raise RuntimeError("Telegram API URL is not configured")
         url = f"{self.api_url}/{method}"
-        resp = requests.post(url, json=payload, timeout=30)
-        resp.raise_for_status()
-        return resp.json()
+        try:
+            resp = requests.post(url, json=payload, timeout=30)
+            if not resp.ok:
+                # Never include the request URL in errors: it contains the bot token.
+                try:
+                    body = resp.json()
+                    detail = body.get("description", "Telegram API request failed")
+                except ValueError:
+                    detail = "Telegram API request failed"
+                raise RuntimeError(f"Telegram {method} failed (HTTP {resp.status_code}): {detail}")
+            return resp.json()
+        except requests.exceptions.RequestException as exc:
+            # Requests exceptions may include the full token-bearing Bot API URL.
+            raise RuntimeError(f"Telegram {method} request failed ({type(exc).__name__})") from None
 
     def _is_image_url_valid(self, url: str) -> bool:
         """
