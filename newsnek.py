@@ -210,7 +210,23 @@ class NewsSnekEngine:
         
         try:
             model_name = self.config.settings.get("summarizer", {}).get("overview_model", "openrouter-auto")
-            provider = self.registry.get(model_name) or ProviderChain("overview-fallback", self.registry.list_providers(), self.registry)
+            provider = self.registry.get(model_name)
+            if provider is None:
+                # Support legacy type names such as "openrouter" when the registered
+                # provider has a named instance such as "openrouter-free".
+                provider_cfg = self.config.settings.get("providers", {})
+                matching_names = [
+                    name for name, cfg in provider_cfg.items()
+                    if cfg.get("type") == model_name
+                ]
+                if matching_names:
+                    provider = self.registry.get(matching_names[0])
+            if provider is None:
+                logger.warning(
+                    "Overview provider '%s' was not found; falling back to the registered provider chain.",
+                    model_name,
+                )
+                provider = ProviderChain("overview-fallback", self.registry.list_providers(), self.registry)
             overview_text = provider.summarize(context, prompt)
             
             for ch_name in target_channels:
