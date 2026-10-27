@@ -69,6 +69,8 @@ class OllamaProvider(Provider):
         self.host = config.get("host", "http://localhost:11434")
         self.model = config.get("model", "llama2")
         self.timeout = config.get("timeout", 120)
+        self.num_predict = int(config.get("num_predict", 600))
+        self.think = config.get("think", False)
 
     def is_available(self) -> bool:
         try:
@@ -83,7 +85,9 @@ class OllamaProvider(Provider):
         payload = {
             "model": self.model,
             "prompt": f"{prompt}\n\n{text}",
-            "stream": True
+            "stream": True,
+            "think": self.think,
+            "options": {"num_predict": self.num_predict}
         }
 
         try:
@@ -111,6 +115,7 @@ class OpenRouterProvider(Provider):
         self.api_key = config.get("api_key")
         self.model = config.get("model", "openrouter/auto")
         self.timeout = config.get("timeout", 120)
+        self.max_tokens = int(config.get("max_tokens", 600))
 
         if not self.api_key:
             raise ValueError(f"OpenRouter provider '{name}' missing api_key")
@@ -129,15 +134,28 @@ class OpenRouterProvider(Provider):
             "model": self.model,
             "messages": [
                 {"role": "user", "content": f"{prompt}\n\n{text}"}
-            ]
+            ],
+            "max_tokens": self.max_tokens
         }
 
         try:
             response = requests.post(url, json=payload, headers=headers, timeout=self.timeout)
-            response.raise_for_status()
+            if not response.ok:
+                # Keep the provider's useful error details without logging credentials.
+                try:
+                    body = response.json()
+                    detail = body.get("error", body)
+                    if not isinstance(detail, str):
+                        detail = json.dumps(detail, ensure_ascii=False)
+                except (ValueError, json.JSONDecodeError):
+                    detail = response.text
+                detail = " ".join(str(detail).split())[:500]
+                raise RuntimeError(f"HTTP {response.status_code}: {detail}")
             result = response.json()
-            # OpenRouter response structure
-            return result["choices"][0]["message"]["content"].strip()
+            choices = result.get("choices") or []
+            if not choices or not isinstance(choices[0].get("message", {}).get("content"), str):
+                raise RuntimeError("OpenRouter returned no summary content")
+            return choices[0]["message"]["content"].strip()
         except Exception as e:
             raise Exception(f"OpenRouter request failed for {self.name}: {e}")
 
