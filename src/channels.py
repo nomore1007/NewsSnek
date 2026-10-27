@@ -166,7 +166,7 @@ class TelegramOutputChannel(OutputChannel):
                 try:
                     body = resp.json()
                     detail = body.get("description", "Telegram API request failed")
-                except (ValueError, requests.exceptions.JSONDecodeError):
+                except ValueError:
                     detail = "Telegram API request failed"
                 raise RuntimeError(f"Telegram {method} failed (HTTP {resp.status_code}): {detail}")
             return resp.json()
