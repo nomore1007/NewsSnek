@@ -9,6 +9,7 @@ import time
 import logging
 import argparse
 from datetime import datetime
+import pytz
 from typing import List, Dict, Any
 
 from src.config import NewsReaderConfig
@@ -165,8 +166,8 @@ class NewsSnekEngine:
                         if not silent_fail:
                             logger.error(f"❌ Summary failed for {url}: {e}")
 
-    def generate_daily_overview(self):
-        """Generate and dispatch a daily overview if the configured time matches."""
+    def generate_daily_overview(self, force: bool = False):
+        """Generate and dispatch the daily overview when scheduled, or immediately when forced."""
         overview_cfg = self.config.settings.get("overview", {})
         if not overview_cfg: return
         schedule_time = overview_cfg.get("time")
@@ -175,8 +176,14 @@ class NewsSnekEngine:
             h, m = map(int, schedule_time.split(":"))
         except: return
 
-        now = datetime.utcnow()
-        if now.hour != h or now.minute != m: return
+        timezone_name = self.config.get("timezone", "UTC")
+        try:
+            local_tz = pytz.timezone(timezone_name)
+        except pytz.UnknownTimeZoneError:
+            logger.warning("Unknown timezone '%s'; using UTC for overview scheduling.", timezone_name)
+            local_tz = pytz.UTC
+        now = datetime.now(local_tz)
+        if not force and (now.hour != h or now.minute != m): return
 
         target_channels = overview_cfg.get("channels")
         if target_channels is None: target_channels = list(self.config.get_output_channel_configs().keys())
@@ -185,8 +192,17 @@ class NewsSnekEngine:
         summaries = self.db.fetch_summaries_for_overview(max_items=overview_cfg.get("max_items", 50))
         if not summaries: return
 
-        source_list = [s['source'] for s in summaries]
-        context = "\n\n".join([f"Source: {s['source']}\nTitle: {s['title']}\nSummary: {s['summary']}" for s in summaries])
+        # DataManager returns SQLite tuples: (url, title, summary, group_name).
+        # Convert them explicitly rather than indexing tuples with dictionary keys.
+        normalized = [
+            {"source": row[0], "title": row[1] or "Untitled", "summary": row[2] or "", "group_name": row[3] or ""}
+            for row in summaries
+        ]
+        source_list = [item["source"] for item in normalized]
+        context = "\n\n".join(
+            f"Source: {item['source']}\nTitle: {item['title']}\nSummary: {item['summary']}"
+            for item in normalized
+        )
         prompt = self.config.get("prompts.overview_summary", "Provide a comprehensive overview:")
         
         try:
@@ -220,11 +236,15 @@ class NewsSnekEngine:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--debug", action="store_true")
-    parser.add_argument("--once", action="store_true")
+    parser.add_argument("--once", action="store_true", help="Process feeds once and check the scheduled overview")
+    parser.add_argument("--overview", action="store_true", help="Generate and send the daily overview immediately")
     args = parser.parse_args()
     setup_logging(args.debug)
     engine = NewsSnekEngine(base_dir=os.path.dirname(os.path.abspath(__file__)), debug=args.debug)
-    if args.once:
+    if args.overview:
+        engine.config.reload()
+        engine.generate_daily_overview(force=True)
+    elif args.once:
         engine.process_cycle()
         engine.generate_daily_overview()
     else:
