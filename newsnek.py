@@ -171,10 +171,13 @@ class NewsSnekEngine:
         overview_cfg = self.config.settings.get("overview", {})
         if not overview_cfg: return
         schedule_time = overview_cfg.get("time")
-        if not schedule_time: return
+        if not force and not schedule_time: return
         try:
-            h, m = map(int, schedule_time.split(":"))
-        except: return
+            h, m = map(int, schedule_time.split(":")) if schedule_time else (0, 0)
+        except (TypeError, ValueError):
+            if not force:
+                return
+            h, m = 0, 0
 
         timezone_name = self.config.get("timezone", "UTC")
         try:
